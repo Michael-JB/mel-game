@@ -12,9 +12,11 @@
 // map is the way out: with the key it is a portal, without it a wall. The left
 // edge takes you back to the previous level.
 
-// `style` is purely visual: roof = a building whose facade runs on down out of
-// sight, tower = a slim structure on top of one, floor/column = interior concrete.
-const solid = (x, y, w, h, style = 'slab', extra) => ({ x, y, w, h, oneWay: false, style, ...extra });
+// `kind` is purely visual, and says what the block is in the city: a building
+// (its facade runs on down out of sight), the street, a chimney stack, a
+// billboard you duck through the legs of, a rooftop plant room, or — inside the
+// office block — a floor slab or a lift shaft.
+const solid = (x, y, w, h, kind = 'slab', extra) => ({ x, y, w, h, oneWay: false, kind, ...extra });
 const ledge = (x, y, w, h = 20) => ({ x, y, w, h, oneWay: true });
 const blinker = (x, y, w, period, on, offset, h = 20) => ({
   x, y, w, h,
@@ -66,25 +68,26 @@ const one = {
   name: 'The Well',
   setting: 'exterior',
   world: { w: 3200, h: 1500 },
-  spawnLeft: { x: 60, y: 1230 },
+  spawnLeft: { x: 350, y: 1230 },
   spawnRight: { x: 3140, y: 830 },
 
   solids: [
     bound(-40),
 
-    // the well: a chimney is the only way out
-    solid(0, 1300, 460, 200, 'roof'),
-    solid(260, 900, 60, 320, 'tower'), // stops short of the floor: walk in underneath
-    solid(420, 900, 60, 400, 'tower'),
+    // You start at the bottom of the alley between two blocks. The 100-unit slot
+    // between their walls is the only way up to the roofs.
+    solid(0, 900, 320, 700, 'building'),
+    solid(0, 1300, 460, 200, 'street'),
+    solid(420, 900, 680, 700, 'building'), // (void from 1100 to 1420)
 
-    solid(480, 900, 620, 200, 'roof'), // first roof   (void from 1100 to 1420)
-    solid(1420, 900, 520, 200, 'roof'), // second roof (void from 1940 to 2260)
+    solid(1420, 900, 520, 700, 'building'), // (void from 1940 to 2260)
 
-    // the service tower on the second roof, with the key on top
-    solid(1600, 180, 60, 640, 'tower'),
-    solid(1780, 240, 60, 660, 'tower'),
+    // on its roof: a sign on a lattice mast, and the stack of the old boiler
+    // house next to it. The 120 between them is the climb to the key.
+    solid(1600, 180, 60, 640, 'billboard'),
+    solid(1780, 240, 60, 660, 'chimney'),
 
-    solid(2260, 900, 940, 200, 'roof'), // the run-out to the portal
+    solid(2260, 900, 940, 700, 'building'), // the run-out to the portal
   ],
 
   platforms: [
@@ -106,14 +109,14 @@ const two = {
   spawnRight: { x: 2730, y: 620 },
 
   solids: [
-    solid(0, 800, 300, 40, 'roof'),
-    solid(1380, 780, 420, 40, 'roof'), // the far side
+    solid(0, 800, 300, 700, 'building'),
+    solid(1380, 780, 420, 720, 'building'), // the far side
 
-    // the rooftop shaft to the key
-    solid(1560, 200, 60, 500, 'tower'),
-    solid(1740, 260, 60, 520, 'tower'),
+    // the climb to the key: a sign mast and a stack, 120 apart
+    solid(1560, 200, 60, 500, 'billboard'),
+    solid(1740, 260, 60, 520, 'chimney'),
 
-    solid(2400, 700, 400, 40, 'roof'), // the roof the window opens off
+    solid(2400, 700, 400, 800, 'building'), // the roof the window opens off
   ],
 
   platforms: [
@@ -151,9 +154,9 @@ const three = {
     solid(0, 1400, 700, 200, 'floor'),
     solid(1180, 1400, 420, 200, 'floor'),
 
-    // the lift shaft — a 1100-unit climb to the key
-    solid(1250, 300, 60, 1020, 'column'),
-    solid(1430, 360, 60, 1040, 'column'),
+    // twin lift shafts, doors standing open — a 1100-unit climb to the key
+    solid(1250, 300, 60, 1020, 'liftshaft'),
+    solid(1430, 360, 60, 1040, 'liftshaft'),
 
     solid(1600, 560, 110, 20, 'slab'), // the one static step on the way down
     solid(2500, 900, 100, 200, 'floor'), // the mezzanine the portal opens off

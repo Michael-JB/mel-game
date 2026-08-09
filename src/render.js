@@ -5,8 +5,10 @@ import {
   drawCity,
   drawStructure,
   drawStructureShadows,
+  drawRooftops,
   drawInteriorShell,
-  drawDebris,
+  drawFurniture,
+  drawInteriorLight,
   drawBrokenWindow,
 } from './scene.js';
 
@@ -36,7 +38,12 @@ export function drawLevel(ctx, level, t) {
     if (b.hidden) continue;
     drawStructure(ctx, b, level.world, level.setting);
   }
-  if (level.setting === 'interior') drawDebris(ctx, level);
+  if (level.setting === 'interior') {
+    drawInteriorLight(ctx, level);
+    drawFurniture(ctx, level);
+  } else {
+    drawRooftops(ctx, level);
+  }
 
   for (const p of level.platforms) {
     if (p.move) {
@@ -77,8 +84,8 @@ function deck(ctx, p, kind) {
   ctx.beginPath();
   ctx.moveTo(p.x, p.y + p.h);
   ctx.lineTo(p.x + p.w, p.y + p.h);
-  ctx.lineTo(p.x + p.w - 90, p.y + p.h + 14);
-  ctx.lineTo(p.x - 90, p.y + p.h + 14);
+  ctx.lineTo(p.x + p.w - 40, p.y + p.h + 9);
+  ctx.lineTo(p.x - 40, p.y + p.h + 9);
   ctx.closePath();
   ctx.fill();
 
