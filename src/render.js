@@ -9,6 +9,8 @@ import {
   drawInteriorShell,
   drawFurniture,
   drawInteriorLight,
+  drawClimbMarks,
+  drawForeground,
   drawBrokenWindow,
 } from './scene.js';
 
@@ -31,6 +33,8 @@ export function drawSceneShell(ctx, level, cam, view) {
   if (level.setting === 'interior') drawInteriorShell(ctx, level, cam, view);
 }
 
+const seed = (p) => Math.abs(Math.round(p.x * 7 + p.y * 13));
+
 export function drawLevel(ctx, level, t) {
   drawStructureShadows(ctx, level);
 
@@ -44,15 +48,16 @@ export function drawLevel(ctx, level, t) {
   } else {
     drawRooftops(ctx, level);
   }
+  drawClimbMarks(ctx, level);
 
   for (const p of level.platforms) {
     if (p.move) {
       drawTrack(ctx, p);
-      deck(ctx, moverAt(p, t), 'mover');
+      deck(ctx, moverAt(p, t), 'mover', seed(p));
       continue;
     }
     if (!p.cycle) {
-      deck(ctx, p, 'fixed');
+      deck(ctx, p, 'fixed', seed(p));
       continue;
     }
 
@@ -63,7 +68,7 @@ export function drawLevel(ctx, level, t) {
       // solid, but flashes for the last stretch before it drops away
       const warn = left < 0.9 && Math.floor(left * 8) % 2 === 0;
       ctx.globalAlpha = warn ? 0.4 : 1;
-      deck(ctx, p, 'blink');
+      deck(ctx, p, 'blink', seed(p));
     } else {
       // ghost outline: it is coming back, and you can see when
       ctx.globalAlpha = left < 0.7 ? 0.7 : 0.3;
@@ -77,27 +82,46 @@ export function drawLevel(ctx, level, t) {
   }
 }
 
-/** A walkway: steel deck, warm top edge, dark underside. */
-function deck(ctx, p, kind) {
+/** A walkway: hung on cables, braced underneath, and never bare. */
+function deck(ctx, p, kind, seed) {
   ctx.save();
-  ctx.fillStyle = 'rgba(28,20,48,0.3)';
+
+  // cables up out of frame, so nothing floats
+  ctx.strokeStyle = 'rgba(24,22,38,0.8)';
+  ctx.lineWidth = 2.5;
+  for (const cx of [p.x + 12, p.x + p.w - 12]) {
+    ctx.beginPath();
+    ctx.moveTo(cx, p.y + 2);
+    ctx.quadraticCurveTo(cx - 8, p.y - 190, cx - 22, p.y - 420);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = 'rgba(255,206,150,0.35)';
+  ctx.lineWidth = 1;
+  for (const cx of [p.x + 12, p.x + p.w - 12]) {
+    ctx.beginPath();
+    ctx.moveTo(cx, p.y + 2);
+    ctx.quadraticCurveTo(cx - 8, p.y - 190, cx - 22, p.y - 420);
+    ctx.stroke();
+  }
+
+  // underside bracing
+  ctx.strokeStyle = '#464b60';
+  ctx.lineWidth = 4;
   ctx.beginPath();
-  ctx.moveTo(p.x, p.y + p.h);
-  ctx.lineTo(p.x + p.w, p.y + p.h);
-  ctx.lineTo(p.x + p.w - 40, p.y + p.h + 9);
-  ctx.lineTo(p.x - 40, p.y + p.h + 9);
-  ctx.closePath();
-  ctx.fill();
+  ctx.moveTo(p.x + 6, p.y + p.h);
+  ctx.lineTo(p.x + p.w * 0.35, p.y + p.h + 16);
+  ctx.lineTo(p.x + p.w - 6, p.y + p.h);
+  ctx.moveTo(p.x + p.w * 0.35, p.y + p.h + 16);
+  ctx.lineTo(p.x + p.w * 0.7, p.y + p.h + 16);
+  ctx.stroke();
 
   ctx.fillStyle = kind === 'mover' ? '#6d7186' : '#8a8f9f';
   ctx.fillRect(p.x, p.y, p.w, p.h);
   ctx.fillStyle = 'rgba(20,22,34,0.55)';
   ctx.fillRect(p.x, p.y + p.h - Math.min(6, p.h * 0.4), p.w, Math.min(6, p.h * 0.4));
-
   ctx.fillStyle = kind === 'blink' ? PAL.accent : '#ffd6a2';
   ctx.fillRect(p.x, p.y, p.w, 4);
 
-  // grating
   ctx.strokeStyle = 'rgba(20,22,34,0.35)';
   ctx.lineWidth = 1.5;
   ctx.beginPath();
@@ -106,7 +130,84 @@ function deck(ctx, p, kind) {
     ctx.lineTo(x, p.y + p.h - 2);
   }
   ctx.stroke();
+
+  deckClutter(ctx, p, seed);
   ctx.restore();
+}
+
+/** Everything left lying on a walkway — a different set on each one. */
+function deckClutter(ctx, p, seed) {
+  const pick = seed % 5;
+  const x = p.x + 12 + (seed % 3) * 14;
+  const y = p.y;
+  if (pick === 0) {
+    // toolbox and a coil of cable
+    ctx.fillStyle = '#b5502f';
+    ctx.fillRect(x, y - 15, 30, 15);
+    ctx.fillStyle = '#7d371f';
+    ctx.fillRect(x, y - 15, 30, 4);
+    ctx.strokeStyle = '#2f3346';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(x + 52, y - 8, 8, 0, Math.PI * 2);
+    ctx.stroke();
+  } else if (pick === 1) {
+    // two cones
+    for (const cx of [x, x + 34]) {
+      ctx.fillStyle = '#e0642f';
+      ctx.beginPath();
+      ctx.moveTo(cx, y);
+      ctx.lineTo(cx + 16, y);
+      ctx.lineTo(cx + 8, y - 24);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = 'rgba(250,240,225,0.85)';
+      ctx.fillRect(cx + 3, y - 15, 10, 4);
+    }
+  } else if (pick === 2) {
+    // a warning lamp on a post
+    ctx.strokeStyle = '#3b4055';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(x + 8, y);
+    ctx.lineTo(x + 8, y - 26);
+    ctx.stroke();
+    ctx.fillStyle = '#ffb03a';
+    ctx.beginPath();
+    ctx.arc(x + 8, y - 30, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,176,58,0.25)';
+    ctx.beginPath();
+    ctx.arc(x + 8, y - 30, 15, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (pick === 3) {
+    // stacked crates
+    ctx.fillStyle = '#8a6a45';
+    ctx.fillRect(x, y - 22, 26, 22);
+    ctx.fillRect(x + 26, y - 15, 20, 15);
+    ctx.fillStyle = 'rgba(255,206,150,0.5)';
+    ctx.fillRect(x, y - 22, 26, 3);
+    ctx.fillRect(x + 26, y - 15, 20, 3);
+    ctx.fillStyle = 'rgba(30,26,44,0.4)';
+    ctx.fillRect(x + 11, y - 22, 4, 22);
+  } else {
+    // a scaffold rail along the back of the deck
+    ctx.strokeStyle = '#5c6178';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(p.x + 8, y);
+    ctx.lineTo(p.x + 8, y - 28);
+    ctx.moveTo(p.x + p.w - 8, y);
+    ctx.lineTo(p.x + p.w - 8, y - 28);
+    ctx.moveTo(p.x + 8, y - 26);
+    ctx.lineTo(p.x + p.w - 8, y - 26);
+    ctx.moveTo(p.x + 8, y - 13);
+    ctx.lineTo(p.x + p.w - 8, y - 13);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,206,150,0.35)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
 }
 
 /** The rail a moving platform runs along, so you can read where it is going. */
@@ -213,7 +314,9 @@ export function drawPortal(ctx, level, side, open, t) {
 }
 
 /** Warm light leaking in from the sun, over the top of everything. */
-export function drawGrade(ctx, view) {
+export function drawGrade(ctx, cam, view, level) {
+  if (level.setting !== 'interior') drawForeground(ctx, cam, view);
+
   const g = ctx.createLinearGradient(view.w, 0, view.w * 0.35, view.h);
   g.addColorStop(0, 'rgba(255,170,90,0.16)');
   g.addColorStop(1, 'rgba(255,140,80,0)');

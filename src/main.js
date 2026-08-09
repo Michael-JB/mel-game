@@ -1,8 +1,10 @@
 import { Input } from './input.js';
 import { Player } from './player.js';
+import { Robot } from './robot.js';
 import { LEVELS, activeBlocks, moverAt } from './levels.js';
 import { drawBackground, drawSceneShell, drawLevel, drawKey, drawPortal, drawGrade } from './render.js';
 import { groundBelow } from './scene.js';
+import { drawJail } from './jail.js';
 import { buildTuner } from './tuner.js';
 
 const canvas = document.getElementById('game');
@@ -18,11 +20,16 @@ const STEP = 1 / 120;
 
 const input = new Input();
 const player = new Player(LEVELS[0].spawnLeft);
+const robot = new Robot(LEVELS[0].spawnLeft);
 const cam = { x: 0, y: 0 };
+const HEAD_START = 470; // how far behind you it starts on each floor
+
+const clamp = (v, lo, hi) => (lo > hi ? (lo + hi) / 2 : Math.max(lo, Math.min(hi, v)));
 
 let level, index, progress, blocks;
 let clock = 0; // drives the platform cycles; never resets, so they stay predictable
 let won = false;
+let arrest = null; // the arrest-and-jail sequence, once it has you
 let toastUntil = 0;
 let view, scale;
 
@@ -42,7 +49,10 @@ function hud() {
 function loadLevel(i, entry) {
   index = i;
   level = LEVELS[i];
-  player.reset(entry === 'right' ? level.spawnRight : level.spawnLeft);
+  const spawn = entry === 'right' ? level.spawnRight : level.spawnLeft;
+  player.reset(spawn);
+  const chase = entry === 'right' ? HEAD_START : -HEAD_START;
+  robot.reset({ x: clamp(spawn.x + chase, 20, level.world.w - 60), y: spawn.y - 20 });
   blocks = activeBlocks(level, clock, progress[i].hasKey); // so the first frame can draw
   cam.x = player.x + player.w / 2 - view.w / 2;
   cam.y = player.y + player.h / 2 - view.h / 2;
@@ -52,14 +62,20 @@ function loadLevel(i, entry) {
 function newRun() {
   progress = LEVELS.map(() => ({ hasKey: false }));
   won = false;
+  arrest = null;
   banner.classList.add('hidden');
   loadLevel(0, 'left');
 }
-input.onRestart = newRun;
+input.onRestart = () => (arrest ? releaseFromJail() : newRun());
 
 function die() {
   newRun();
   say('You fell. Back to the start.', 2.5);
+}
+
+function releaseFromJail() {
+  player.arrested = false;
+  newRun();
 }
 
 function resize() {
@@ -74,8 +90,6 @@ addEventListener('resize', resize);
 resize();
 newRun();
 buildTuner(document.getElementById('tuner'), document.getElementById('tuner-toggle'));
-
-const clamp = (v, lo, hi) => (lo > hi ? (lo + hi) / 2 : Math.max(lo, Math.min(hi, v)));
 
 function followCamera(dt) {
   const targetX = player.x + player.w / 2 - view.w / 2;
@@ -93,6 +107,10 @@ function hits(a, b) {
 
 function update(dt, now) {
   if (won) return;
+  if (arrest) {
+    arrest.t += dt;
+    return;
+  }
   const here = progress[index];
   blocks = activeBlocks(level, clock, here.hasKey);
 
@@ -108,6 +126,18 @@ function update(dt, now) {
   }
 
   player.update(dt, now, input, blocks);
+
+  // the chase
+  const lost = robot.update(dt, now, blocks, player, level.world);
+  if (lost) {
+    robot.reset({ x: clamp(player.x - HEAD_START, 20, level.world.w - 60), y: player.y - 20 });
+    say('Another unit picks up the chase.', 1.6);
+  }
+  if (hits(player.box, robot.box)) {
+    arrest = { t: 0, x: player.x, y: player.y };
+    player.arrested = true;
+    return;
+  }
 
   if (player.y > level.world.h + 200) {
     die();
@@ -175,11 +205,16 @@ function frame() {
   drawPortal(ctx, level, 1, progress[index].hasKey, clock);
   if (index > 0) drawPortal(ctx, level, -1, true, clock);
 
+  const rFloor = groundBelow(blocks, robot.box);
+  if (rFloor) robot.body.drawShadow(ctx, rFloor);
+  robot.draw(ctx);
+
   const floor = groundBelow(blocks, player.box);
   if (floor) player.drawShadow(ctx, floor);
   player.draw(ctx);
   ctx.restore();
-  drawGrade(ctx, view);
+  drawGrade(ctx, cam, view, level);
+  if (arrest) drawJail(ctx, view, arrest.t);
 
   requestAnimationFrame(frame);
 }
@@ -188,11 +223,13 @@ requestAnimationFrame(frame);
 // handy while we iterate on the levels
 window.__game = {
   player,
+  robot,
   input,
   cam,
   LEVELS,
   at: () => ({ index, level: level.name, progress, clock }),
   goto: (i, entry) => loadLevel(i, entry),
+  bust: () => { arrest = { t: 0 }; player.arrested = true; },
   tp: (x, y) => {
     player.reset({ x, y });
     cam.x = clamp(x + player.w / 2 - view.w / 2, 0, level.world.w - view.w);

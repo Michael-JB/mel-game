@@ -646,16 +646,131 @@ function railing(ctx, b) {
   ctx.restore();
 }
 
+/** The block a thing is standing on — the only surface that can take its shadow. */
+function receiverBelow(level, b) {
+  let best = null;
+  for (const o of level.solids) {
+    if (o === b || o.hidden) continue;
+    if (o.x >= b.x + b.w || o.x + o.w <= b.x) continue;
+    if (o.y < b.y + b.h - 6) continue;
+    if (best === null || o.y < best.y) best = o;
+  }
+  return best;
+}
+
+/**
+ * Only things that stand on something cast a shadow, and it is clipped to what
+ * it stands on. Buildings and floors are the backdrop — they cast onto nothing,
+ * which is what stops shadows appearing in mid-air.
+ */
 export function drawStructureShadows(ctx, level) {
   const inside = level.setting === 'interior';
-  ctx.save();
-  ctx.fillStyle = inside ? 'rgba(16,12,30,0.4)' : 'rgba(28,20,48,0.34)';
+  const len = inside ? 44 : 130;
   for (const b of level.solids) {
     if (b.hidden) continue;
-    castShadow(ctx, b.x, b.y, b.w, Math.min(b.h, 160), inside ? 44 : 150);
+    const kind = b.kind || 'building';
+    if (kind === 'building' || kind === 'street' || kind === 'floor') continue;
+    const host = receiverBelow(level, b);
+    if (!host) continue;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(host.x, host.y, host.w, host.h + 900);
+    ctx.clip();
+    ctx.fillStyle = 'rgba(22,16,42,0.42)';
+    castShadow(ctx, b.x, b.y, b.w, b.h, len);
+    ctx.restore();
+  }
+}
+
+/**
+ * Red paint on the faces you are meant to climb — the city marks its own
+ * maintenance routes, and it lifts them off the wall behind.
+ */
+export function drawClimbMarks(ctx, level) {
+  for (const b of level.solids) {
+    if (!b.climb || b.hidden) continue;
+    const faces = b.climb === 'both' ? [-1, 1] : [b.climb === 'left' ? -1 : 1];
+    for (const side of faces) {
+      const x = side > 0 ? b.x + b.w - 13 : b.x;
+      ctx.fillStyle = 'rgba(217,68,54,0.92)';
+      ctx.fillRect(x, b.y, 13, b.h);
+      ctx.fillStyle = 'rgba(255,150,120,0.8)';
+      ctx.fillRect(side > 0 ? x + 10 : x, b.y, 3, b.h);
+      // rungs, so it reads as something to go up
+      ctx.fillStyle = 'rgba(24,20,34,0.5)';
+      for (let y = b.y + 26; y < b.y + b.h - 12; y += 44) ctx.fillRect(x, y, 13, 6);
+      ctx.fillStyle = 'rgba(255,214,170,0.5)';
+      ctx.fillRect(x, b.y, 13, 4);
+    }
+  }
+}
+
+/**
+ * Silhouettes between you and the level: bigger, darker and moving faster than
+ * anything else, which is what gives the city depth on the near side.
+ */
+export function drawForeground(ctx, cam, view) {
+  const depth = 1.45;
+  const offX = -cam.x * depth;
+  const offY = -cam.y * depth * 0.12;
+  const span = 1250;
+  const first = Math.floor((-offX - span) / span);
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(9,7,20,0.92)';
+  ctx.strokeStyle = 'rgba(9,7,20,0.92)';
+
+  for (let i = first; i < first + Math.ceil(view.w / span) + 3; i++) {
+    const x = i * span + offX;
+    const r = hash(i, 91, 1);
+    const kind = Math.floor(hash(i, 91, 2) * 3);
+
+    if (kind === 0) {
+      // cable swag drooping across the top of frame
+      const y = 40 + r * 90 + offY;
+      ctx.lineWidth = 7;
+      ctx.beginPath();
+      ctx.moveTo(x - 200, y);
+      ctx.quadraticCurveTo(x + span / 2, y + 150 + r * 90, x + span + 200, y);
+      ctx.stroke();
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(x - 200, y + 46);
+      ctx.quadraticCurveTo(x + span / 2, y + 210 + r * 90, x + span + 200, y + 46);
+      ctx.stroke();
+    } else if (kind === 1) {
+      // the corner of a roof, cut in at the bottom of frame
+      const h = 150 + r * 130;
+      const w = 260 + r * 180;
+      ctx.fillRect(x, view.h - h + offY, w, h + 200);
+      ctx.fillRect(x - 14, view.h - h + offY, w + 28, 16);
+      // handrail on top of it
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.moveTo(x + 20, view.h - h + offY);
+      ctx.lineTo(x + 20, view.h - h - 54 + offY);
+      ctx.moveTo(x + w - 20, view.h - h + offY);
+      ctx.lineTo(x + w - 20, view.h - h - 54 + offY);
+      ctx.moveTo(x + 20, view.h - h - 50 + offY);
+      ctx.lineTo(x + w - 20, view.h - h - 50 + offY);
+      ctx.stroke();
+    } else {
+      // a mast rising past the camera
+      const w = 34 + r * 26;
+      ctx.fillRect(x, -200 + offY, w, view.h * (0.35 + r * 0.3) + 200);
+      ctx.lineWidth = 5;
+      for (let k = 0; k < 4; k++) {
+        const y = 60 + k * 90 + offY;
+        ctx.beginPath();
+        ctx.moveTo(x - 26, y);
+        ctx.lineTo(x + w + 26, y - 16);
+        ctx.stroke();
+      }
+    }
   }
   ctx.restore();
 }
+
 // ---------------------------------------------------------------- interior
 
 /**
@@ -913,59 +1028,130 @@ export function drawInteriorLight(ctx, level) {
  */
 export function drawBrokenWindow(ctx, level, spec, open, t) {
   const edge = spec.side > 0 ? level.world.w : 0;
-  const depth = 150;
+  const depth = 190;
   const x0 = spec.side > 0 ? edge - depth : edge;
   const holeY = spec.y - spec.h;
+  const inside = spec.inside;
 
-  // the facade the window sits in
-  ctx.fillStyle = spec.inside ? '#3b3a46' : PAL.concrete;
+  // the wall the window is set into
+  ctx.fillStyle = inside ? '#3b3a46' : '#ded9cf';
   ctx.fillRect(x0, -500, depth, level.world.h + 1000);
-  if (!spec.inside) {
+  if (!inside) {
     const shade = ctx.createLinearGradient(x0, 0, x0 + depth, 0);
-    shade.addColorStop(0, 'rgba(80,92,130,0.5)');
-    shade.addColorStop(1, 'rgba(255,196,140,0.4)');
+    shade.addColorStop(0, 'rgba(52,64,104,0.5)');
+    shade.addColorStop(1, 'rgba(255,190,130,0.45)');
     ctx.fillStyle = shade;
     ctx.fillRect(x0, -500, depth, level.world.h + 1000);
   }
 
-  // the opening
+  // reveal and sill
+  const fx = x0 - 6;
+  const fw = depth + 12;
+  ctx.fillStyle = inside ? '#2b2a35' : '#b9b3a6';
+  ctx.fillRect(fx, holeY - 16, fw, 16);
+  ctx.fillRect(fx, spec.y, fw, 22);
+  ctx.fillStyle = 'rgba(255,214,160,0.75)';
+  ctx.fillRect(fx, spec.y, fw, 5);
+
+  // what you see through it
   ctx.save();
   ctx.beginPath();
-  ctx.rect(x0 - 4, holeY, depth + 8, spec.h);
+  ctx.rect(fx, holeY, fw, spec.h);
   ctx.clip();
-  const inner = ctx.createLinearGradient(x0, holeY, x0 + depth, holeY + spec.h);
-  inner.addColorStop(0, open ? 'rgba(255,196,120,0.85)' : 'rgba(18,16,28,0.92)');
-  inner.addColorStop(1, open ? 'rgba(255,140,80,0.6)' : 'rgba(28,26,42,0.92)');
-  ctx.fillStyle = inner;
-  ctx.fillRect(x0 - 4, holeY, depth + 8, spec.h);
-  ctx.restore();
+  const beyond = ctx.createLinearGradient(x0, holeY, x0 + depth, spec.y);
+  if (open) {
+    beyond.addColorStop(0, 'rgba(255,206,140,0.9)');
+    beyond.addColorStop(1, 'rgba(255,132,74,0.75)');
+  } else {
+    beyond.addColorStop(0, 'rgba(20,18,32,0.95)');
+    beyond.addColorStop(1, 'rgba(34,30,50,0.95)');
+  }
+  ctx.fillStyle = beyond;
+  ctx.fillRect(fx, holeY, fw, spec.h);
 
-  // frame
-  ctx.strokeStyle = spec.inside ? 'rgba(255,214,160,0.55)' : 'rgba(60,66,90,0.8)';
-  ctx.lineWidth = 6;
-  ctx.strokeRect(x0 - 3, holeY, depth + 6, spec.h);
+  // the glass that is still in the frame, and the hole punched out of it
+  const cxp = x0 + depth * 0.5;
+  const cyp = holeY + spec.h * 0.52;
+  const glass = new Path2D();
+  glass.rect(fx, holeY, fw, spec.h);
+  const hole = [];
+  const pts = 13;
+  for (let i = 0; i < pts; i++) {
+    const a = (i / pts) * Math.PI * 2;
+    const rad = 0.3 + hash(i, spec.y, 51) * 0.3;
+    hole.push([cxp + Math.cos(a) * depth * rad * 1.15, cyp + Math.sin(a) * spec.h * rad * 1.3]);
+  }
+  glass.moveTo(hole[0][0], hole[0][1]);
+  for (let i = 1; i < pts; i++) glass.lineTo(hole[i][0], hole[i][1]);
+  glass.closePath();
+  ctx.fillStyle = inside ? 'rgba(120,160,190,0.16)' : 'rgba(150,190,215,0.3)';
+  ctx.fill(glass, 'evenodd');
 
-  // shards clinging to the frame
-  ctx.fillStyle = open ? 'rgba(255,226,180,0.75)' : 'rgba(170,196,215,0.6)';
-  for (let i = 0; i < 14; i++) {
-    const along = hash(i, spec.y, 31);
-    const top = i % 2 === 0;
-    const px = x0 + along * depth;
-    const py = top ? holeY : holeY + spec.h;
-    const dep = 12 + hash(i, spec.y, 32) * 34;
+  // cracks running out of the break
+  ctx.strokeStyle = inside ? 'rgba(200,225,240,0.45)' : 'rgba(255,255,255,0.6)';
+  ctx.lineWidth = 1.6;
+  for (let i = 0; i < pts; i += 2) {
+    const [hx, hy] = hole[i];
+    let px = hx;
+    let py = hy;
     ctx.beginPath();
     ctx.moveTo(px, py);
-    ctx.lineTo(px + 16, py);
-    ctx.lineTo(px + 8, py + (top ? dep : -dep));
+    for (let k = 0; k < 3; k++) {
+      px += (hx - cxp) * (0.35 + hash(i, k, 52) * 0.4);
+      py += (hy - cyp) * (0.35 + hash(i, k, 53) * 0.4);
+      ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+  }
+
+  // teeth of glass left around the opening
+  ctx.fillStyle = inside ? 'rgba(190,220,235,0.55)' : 'rgba(215,235,245,0.7)';
+  for (let i = 0; i < pts; i++) {
+    const [hx, hy] = hole[i];
+    const [nx, ny] = hole[(i + 1) % pts];
+    const mx = (hx + nx) / 2;
+    const my = (hy + ny) / 2;
+    ctx.beginPath();
+    ctx.moveTo(hx, hy);
+    ctx.lineTo(nx, ny);
+    ctx.lineTo(mx + (cxp - mx) * 0.22, my + (cyp - my) * 0.22);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // glazing bar, snapped
+  ctx.strokeStyle = inside ? 'rgba(120,126,150,0.8)' : 'rgba(90,96,120,0.85)';
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(cxp, holeY);
+  ctx.lineTo(cxp - 6, cyp - spec.h * 0.28);
+  ctx.moveTo(cxp + 9, cyp + spec.h * 0.3);
+  ctx.lineTo(cxp + 2, spec.y);
+  ctx.stroke();
+  ctx.restore();
+
+  // frame, then splinters on the sill
+  ctx.strokeStyle = inside ? 'rgba(140,146,170,0.9)' : 'rgba(90,96,120,0.9)';
+  ctx.lineWidth = 7;
+  ctx.strokeRect(fx, holeY, fw, spec.h);
+
+  ctx.fillStyle = open ? 'rgba(255,226,180,0.85)' : 'rgba(198,222,236,0.75)';
+  for (let i = 0; i < 9; i++) {
+    const px = fx + 10 + hash(i, spec.y, 54) * (fw - 24);
+    const hgt = 6 + hash(i, spec.y, 55) * 13;
+    ctx.beginPath();
+    ctx.moveTo(px, spec.y);
+    ctx.lineTo(px + 9, spec.y);
+    ctx.lineTo(px + 4, spec.y - hgt);
     ctx.closePath();
     ctx.fill();
   }
 
   if (open) {
-    ctx.globalAlpha = 0.35 + Math.sin(t * 3) * 0.12;
+    ctx.globalAlpha = 0.4 + Math.sin(t * 3) * 0.14;
     ctx.strokeStyle = '#ffd08a';
     ctx.lineWidth = 4;
-    ctx.strokeRect(x0 - 8, holeY - 5, depth + 16, spec.h + 10);
+    ctx.strokeRect(fx - 7, holeY - 7, fw + 14, spec.h + 14);
     ctx.globalAlpha = 1;
   }
 }
