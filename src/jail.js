@@ -130,6 +130,6 @@ export function drawJail(ctx, view, t) {
   ctx.fillText('DETAINED', view.w / 2, view.h * 0.5);
   ctx.font = '400 14px ui-monospace, Menlo, monospace';
   ctx.fillStyle = '#f2f0eb';
-  ctx.fillText('press R to run it again', view.w / 2, view.h * 0.5 + 28);
+  ctx.fillText('press R, or the arrow button, to run it again', view.w / 2, view.h * 0.5 + 28);
   ctx.restore();
 }

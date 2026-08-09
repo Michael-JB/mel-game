@@ -15,14 +15,20 @@ const banner = document.getElementById('banner');
 const bannerText = document.getElementById('banner-text');
 const toast = document.getElementById('toast');
 
-const VIEW_H = 620; // world units visible vertically; sets the zoom
+// Zoom: aim for VIEW_H units of height, but never show less than MIN_VIEW_W
+// across (phones in landscape) and never zoom out past MAX_VIEW_H (portrait,
+// where the runner would otherwise end up the size of an ant).
+const VIEW_H = 620;
+const MIN_VIEW_W = 820;
+const MAX_VIEW_H = 900;
 const STEP = 1 / 120;
 
 const input = new Input();
 const player = new Player(LEVELS[0].spawnLeft);
 const robot = new Robot(LEVELS[0].spawnLeft);
 const cam = { x: 0, y: 0 };
-const GRACE = 3.5; // seconds before the drone drops in and starts hunting
+const GRACE = 3.5; // head start before the drone drops in
+const TRAIL_BACK = 280; // how far back down your own trail it appears
 
 const clamp = (v, lo, hi) => (lo > hi ? (lo + hi) / 2 : Math.max(lo, Math.min(hi, v)));
 
@@ -30,8 +36,10 @@ let level, index, progress, blocks;
 let clock = 0; // drives the platform cycles; never resets, so they stay predictable
 let won = false;
 let arrest = null; // the arrest-and-jail sequence, once it has you
-let chaseAt = 0; // when the drone wakes up
-let armed = false; // ...and whether it has cleared the spawn yet
+let chaseAt = 0; // when the drone is due
+let chasing = false; // whether it has actually dropped in yet
+let trail = []; // where you have recently had both feet down
+let trailAt = 0;
 let toastUntil = 0;
 let view, scale;
 
@@ -55,18 +63,22 @@ function loadLevel(i, entry) {
   player.reset(spawn);
   // It drops in where you came in — the only spot the level guarantees is
   // standable — and stays inert until you have had a head start.
-  startChase(spawn);
+  trail = [];
+  armChase(GRACE);
   blocks = activeBlocks(level, clock, progress[i].hasKey); // so the first frame can draw
   cam.x = player.x + player.w / 2 - view.w / 2;
   cam.y = player.y + player.h / 2 - view.h / 2;
   hud();
 }
 
-/** Put the drone back at a known-good spot and give the runner a head start. */
-function startChase(at) {
-  robot.reset({ x: at.x, y: at.y });
-  chaseAt = clock + GRACE;
-  armed = false;
+/**
+ * Arm the chase. The drone doesn't appear until there is somewhere behind you to
+ * put it — a spot you actually stood on, far enough back to be fair — so it can
+ * never materialise on top of you, and standing still merely postpones it.
+ */
+function armChase(delay) {
+  chasing = false;
+  chaseAt = clock + delay;
   say('Patrol drone inbound — move.', 2.2);
 }
 
@@ -90,17 +102,28 @@ function releaseFromJail() {
 }
 
 function resize() {
+  const vv = window.visualViewport;
+  const cssW = Math.round(vv ? vv.width : innerWidth);
+  const cssH = Math.round(vv ? vv.height : innerHeight);
   const dpr = Math.min(devicePixelRatio || 1, 2);
-  canvas.width = Math.round(innerWidth * dpr);
-  canvas.height = Math.round(innerHeight * dpr);
-  scale = innerHeight / VIEW_H;
-  view = { w: innerWidth / scale, h: VIEW_H };
+  canvas.width = Math.round(cssW * dpr);
+  canvas.height = Math.round(cssH * dpr);
+  canvas.style.width = `${cssW}px`;
+  canvas.style.height = `${cssH}px`;
+  scale = Math.max(cssH / MAX_VIEW_H, Math.min(cssH / VIEW_H, cssW / MIN_VIEW_W));
+  view = { w: cssW / scale, h: cssH / scale };
   ctx.setTransform(dpr * scale, 0, 0, dpr * scale, 0, 0);
 }
 addEventListener('resize', resize);
+addEventListener('orientationchange', () => setTimeout(resize, 150));
+if (window.visualViewport) visualViewport.addEventListener('resize', resize);
 resize();
 newRun();
 buildTuner(document.getElementById('tuner'), document.getElementById('tuner-toggle'));
+input.bindPad(document.getElementById('touch'));
+document.getElementById('restart').addEventListener('click', () => input.onRestart());
+addEventListener('touchstart', () => document.body.classList.add('touch'), { once: true, passive: true });
+if (innerHeight > innerWidth) say('Turn the phone sideways for more room.', 4);
 
 function followCamera(dt) {
   const targetX = player.x + player.w / 2 - view.w / 2;
@@ -138,16 +161,31 @@ function update(dt, now) {
 
   player.update(dt, now, input, blocks);
 
-  // the chase
-  if (clock >= chaseAt) {
+  // breadcrumbs: the route you actually took, which is the route it will take
+  if (player.grounded && clock - trailAt > 0.25) {
+    trailAt = clock;
+    trail.push({ x: player.x, y: player.y });
+    if (trail.length > 40) trail.shift();
+  }
+
+  if (!chasing) {
+    if (clock >= chaseAt) {
+      const behind = trail.find(
+        (p) =>
+          Math.hypot(p.x - player.x, p.y - player.y) > TRAIL_BACK &&
+          !blocks.some((b) => hits({ x: p.x, y: p.y, w: robot.body.w, h: robot.body.h }, b))
+      );
+      if (behind) {
+        robot.reset(behind);
+        chasing = true;
+      }
+    }
+  } else {
     const lost = robot.update(dt, now, blocks, player, level.world);
-    const touching = hits(player.box, robot.box);
-    // never arrest you on the spawn itself, but don't let standing still save you
-    if (!armed && (!touching || clock > chaseAt + 2)) armed = true;
     if (lost) {
-      startChase(level.spawnLeft);
+      armChase(1.5);
       say('Another unit picks up the chase.', 1.8);
-    } else if (armed && touching) {
+    } else if (hits(player.box, robot.box)) {
       arrest = { t: 0, x: player.x, y: player.y };
       player.arrested = true;
       return;
@@ -185,7 +223,7 @@ function update(dt, now) {
       return;
     } else {
       won = true;
-      bannerText.innerHTML = 'All three levels cleared<small>Press R to start over</small>';
+      bannerText.innerHTML = 'All three levels cleared<small>press R, or the arrow button, to start over</small>';
       banner.classList.remove('hidden');
     }
   }
@@ -220,7 +258,7 @@ function frame() {
   drawPortal(ctx, level, 1, progress[index].hasKey, clock);
   if (index > 0) drawPortal(ctx, level, -1, true, clock);
 
-  if (clock >= chaseAt) {
+  if (chasing) {
     const rFloor = groundBelow(blocks, robot.box);
     if (rFloor) robot.body.drawShadow(ctx, rFloor);
     robot.draw(ctx);

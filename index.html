@@ -2,7 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#12101c">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Stickman — Sunset City</title>
 <link rel="stylesheet" href="style.css">
 </head>
@@ -14,13 +17,25 @@
   <span id="key-status" class="chip locked">No key</span>
 </div>
 
-<div id="hint">A / D or ← → move · W / ↑ / Space jump · cling to a wall and kick off it, again and again, to climb it · grab a lip and jump to pull yourself up, S to drop · find the key, then walk into the right edge of the map · R restart</div>
-
-<button id="tuner-toggle" type="button">tuning</button>
+<div id="tools">
+  <button id="restart" type="button" title="restart">&#8635;</button>
+  <button id="tuner-toggle" type="button">tuning</button>
+</div>
 <div id="tuner" class="hidden"></div>
 
 <div id="toast" class="hidden"></div>
 <div id="banner" class="hidden"><div id="banner-text"></div></div>
+
+<div id="touch">
+  <div class="pad">
+    <button class="tbtn" data-act="left" aria-label="left">&#9664;</button>
+    <button class="tbtn" data-act="right" aria-label="right">&#9654;</button>
+  </div>
+  <div class="pad">
+    <button class="tbtn drop" data-act="down" aria-label="drop">&#9660;</button>
+    <button class="tbtn jump" data-act="jump" aria-label="jump">&#9650;</button>
+  </div>
+</div>
 
 <script type="module" src="src/main.js"></script>
 </body>

@@ -10,22 +10,30 @@
 html, body {
   margin: 0;
   height: 100%;
+  height: 100dvh;
   overflow: hidden;
+  overscroll-behavior: none;
   background: #12101c;
   font: 14px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
   color: var(--paper);
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
 }
 
 #game {
   display: block;
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
 }
 
 #hud {
   position: fixed;
-  top: 12px;
-  left: 12px;
+  top: calc(12px + env(safe-area-inset-top));
+  left: calc(12px + env(safe-area-inset-left));
   display: flex;
   gap: 10px;
   align-items: center;
@@ -54,20 +62,16 @@ html, body {
   text-shadow: none;
 }
 
-#hint {
+#tools {
   position: fixed;
-  bottom: 12px;
-  left: 12px;
-  right: 12px;
-  opacity: 0.55;
-  pointer-events: none;
-  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8);
+  top: calc(12px + env(safe-area-inset-top));
+  right: calc(12px + env(safe-area-inset-right));
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
 
-#tuner-toggle {
-  position: fixed;
-  top: 12px;
-  right: 12px;
+#tools button {
   font: inherit;
   padding: 3px 10px;
   border: 2px solid rgba(242, 240, 235, 0.6);
@@ -75,12 +79,15 @@ html, body {
   background: var(--panel);
   color: var(--paper);
   cursor: pointer;
+  touch-action: manipulation;
 }
+
+#restart { font-size: 16px; line-height: 1; padding: 4px 11px; }
 
 #tuner {
   position: fixed;
-  top: 48px;
-  right: 12px;
+  top: calc(50px + env(safe-area-inset-top));
+  right: calc(12px + env(safe-area-inset-right));
   width: 290px;
   max-height: calc(100vh - 72px);
   overflow-y: auto;
@@ -181,4 +188,68 @@ html, body {
   font-weight: 400;
   opacity: 0.7;
   color: var(--paper);
+}
+
+
+/* ---------------------------------------------------------------- touch pad */
+
+#touch {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: none;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding: 0 calc(16px + env(safe-area-inset-left)) calc(18px + env(safe-area-inset-bottom))
+    calc(16px + env(safe-area-inset-right));
+  pointer-events: none;
+}
+
+@media (pointer: coarse) { #touch { display: flex; } }
+body.touch #touch { display: flex; }
+
+#touch .pad {
+  display: flex;
+  gap: 14px;
+  align-items: flex-end;
+}
+
+.tbtn {
+  pointer-events: auto;
+  touch-action: none;
+  width: 74px;
+  height: 74px;
+  border-radius: 50%;
+  border: 2px solid rgba(242, 240, 235, 0.5);
+  background: rgba(18, 16, 30, 0.5);
+  backdrop-filter: blur(3px);
+  color: rgba(242, 240, 235, 0.85);
+  font-size: 22px;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  transition: background 90ms, transform 90ms;
+}
+
+.tbtn.jump {
+  width: 92px;
+  height: 92px;
+  border-color: rgba(255, 208, 138, 0.75);
+  color: var(--warm);
+  font-size: 28px;
+}
+
+.tbtn.drop { width: 58px; height: 58px; font-size: 17px; }
+
+.tbtn.down {
+  background: rgba(255, 208, 138, 0.35);
+  transform: scale(0.94);
+}
+
+/* a phone in portrait gets a narrower slice of the world; keep the chrome small */
+@media (max-height: 520px) {
+  .tbtn { width: 62px; height: 62px; }
+  .tbtn.jump { width: 78px; height: 78px; }
+  .tbtn.drop { width: 50px; height: 50px; }
 }
