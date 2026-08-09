@@ -1,0 +1,80 @@
+:root {
+  --ink: #1a1a1a;
+  --paper: #f2f0eb;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--paper);
+  font: 14px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--ink);
+}
+
+#game {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+}
+
+#hud {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  pointer-events: none;
+}
+
+#hud .label {
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.chip {
+  padding: 2px 8px;
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+}
+
+.chip.locked { opacity: 0.45; }
+.chip.have { background: #ffd23f; }
+
+#hint {
+  position: fixed;
+  bottom: 12px;
+  left: 12px;
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+#banner {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(242, 240, 235, 0.85);
+  pointer-events: none;
+}
+
+#banner.hidden { display: none; }
+
+#banner-text {
+  font-size: 28px;
+  font-weight: 700;
+  text-align: center;
+  letter-spacing: 0.04em;
+}
+
+#banner-text small {
+  display: block;
+  margin-top: 10px;
+  font-size: 14px;
+  font-weight: 400;
+  opacity: 0.6;
+}
