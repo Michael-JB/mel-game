@@ -1,112 +1,178 @@
-// Live movement tuning. Drag the sliders until it feels right, hit Copy, and
-// paste the result over the P block in player.js.
+// Seven knobs that between them cover the whole feel of the movement. Each one
+// drives several of the raw constants in P, so the constants stay consistent
+// with each other — e.g. asking for a taller jump also strengthens the wall kick
+// and the terminal fall speed, which is what you would have done by hand.
+//
+// Drag until it feels right, hit Copy, paste the result over the P block.
 import { P } from './player.js';
 
-const STORE = 'stickman-tuning';
+const STORE = 'stickman-tuning-v2';
 
-// [key, min, max, step, group]
-const SPECS = [
-  ['MAX_RUN', 100, 700, 5, 'run'],
-  ['ACCEL', 200, 4000, 25, 'run'],
-  ['FRICTION', 200, 4000, 25, 'run'],
-  ['AIR_ACCEL', 100, 3000, 25, 'run'],
-  ['AIR_DRAG', 0, 1200, 10, 'run'],
+const round = (v, places) => {
+  const f = 10 ** places;
+  return Math.round(v * f) / f;
+};
+const fmt = (v) => String(round(v, 2));
 
-  ['JUMP_V', 300, 1200, 5, 'jump'],
-  ['GRAVITY', 800, 4500, 25, 'jump'],
-  ['FALL_MULT', 1, 3.5, 0.05, 'jump'],
-  ['APEX_VY', 0, 350, 5, 'jump'],
-  ['APEX_MULT', 0.1, 1, 0.02, 'jump'],
-  ['JUMP_CUT', 0.05, 1, 0.05, 'jump'],
-  ['MAX_FALL', 400, 3000, 25, 'jump'],
-  ['COYOTE', 0, 0.3, 0.01, 'jump'],
-  ['BUFFER', 0, 0.3, 0.01, 'jump'],
-
-  ['WALL_JUMP_VY', 300, 1300, 10, 'walls'],
-  ['WALL_JUMP_VX', 0, 700, 10, 'walls'],
-  ['WALL_LOCK', 0, 0.4, 0.01, 'walls'],
-  ['SLIDE_SPEED', 0, 700, 10, 'walls'],
-  ['CLIMB_TIME', 0.1, 1.2, 0.02, 'walls'],
+const KNOBS = [
+  {
+    key: 'topSpeed',
+    label: 'top speed',
+    min: 140, max: 620, step: 5,
+    hint: 'how fast he ends up running',
+  },
+  {
+    key: 'windup',
+    label: 'wind-up',
+    min: 0.02, max: 0.7, step: 0.01, unit: 's',
+    hint: 'how long to reach that speed, and to shed it again',
+  },
+  {
+    key: 'jumpHeight',
+    label: 'jump height',
+    min: 40, max: 240, step: 1,
+    hint: 'how high a full jump goes',
+  },
+  {
+    key: 'riseTime',
+    label: 'rise time',
+    min: 0.15, max: 0.6, step: 0.005, unit: 's',
+    hint: 'how long it takes to get there — lower is snappier',
+  },
+  {
+    key: 'fallWeight',
+    label: 'fall weight',
+    min: 1, max: 3.2, step: 0.05, unit: '×',
+    hint: 'how much heavier the way down is than the way up',
+  },
+  {
+    key: 'apexHang',
+    label: 'apex hang',
+    min: 0, max: 1, step: 0.02,
+    hint: 'how long he floats at the top of a jump',
+  },
+  {
+    key: 'wallKick',
+    label: 'wall kick',
+    min: 0, max: 520, step: 10,
+    hint: 'how far a wall jump throws you off — small enough and you can climb one wall',
+  },
 ];
 
-const GROUPS = { run: 'Running', jump: 'Jumping', walls: 'Walls & ledges' };
-const DEFAULTS = Object.fromEntries(SPECS.map(([k]) => [k, P[k]]));
+/** Read the seven knobs back out of the raw constants. */
+function settingsFromP() {
+  return {
+    topSpeed: P.MAX_RUN,
+    windup: round(P.MAX_RUN / P.ACCEL, 2),
+    jumpHeight: Math.round((P.JUMP_V * P.JUMP_V) / (2 * P.GRAVITY)),
+    riseTime: round(P.JUMP_V / P.GRAVITY, 3),
+    fallWeight: P.FALL_MULT,
+    apexHang: round(0.5 + (0.42 - P.APEX_MULT) / 0.8, 2),
+    wallKick: P.WALL_JUMP_VX,
+  };
+}
+
+/** ...and push them back in. */
+function applyToP(s) {
+  P.MAX_RUN = s.topSpeed;
+  P.ACCEL = s.topSpeed / s.windup;
+  P.FRICTION = P.ACCEL * 1.3;
+  P.AIR_ACCEL = P.ACCEL * 0.74;
+  P.AIR_DRAG = P.ACCEL * 0.17;
+
+  P.GRAVITY = (2 * s.jumpHeight) / (s.riseTime * s.riseTime);
+  P.JUMP_V = (2 * s.jumpHeight) / s.riseTime;
+  P.FALL_MULT = s.fallWeight;
+  P.MAX_FALL = P.GRAVITY * 0.65;
+
+  P.APEX_VY = Math.max(0, 110 + (s.apexHang - 0.5) * 180);
+  P.APEX_MULT = Math.min(1, Math.max(0.08, 0.42 + (0.5 - s.apexHang) * 0.8));
+
+  P.WALL_JUMP_VX = s.wallKick;
+  P.WALL_JUMP_VY = P.JUMP_V * 1.14;
+}
+
+const DEFAULTS = settingsFromP();
+const RAW = { ...P }; // reset puts back exactly what the code says, not a round-trip
 
 export function buildTuner(panel, toggle) {
+  const settings = { ...DEFAULTS };
   const rows = new Map();
 
-  for (const group of Object.keys(GROUPS)) {
-    const h = document.createElement('h4');
-    h.textContent = GROUPS[group];
-    panel.append(h);
+  for (const knob of KNOBS) {
+    const row = document.createElement('label');
+    const name = document.createElement('span');
+    name.textContent = knob.label;
+    const value = document.createElement('b');
+    const input = document.createElement('input');
+    input.type = 'range';
+    input.min = knob.min;
+    input.max = knob.max;
+    input.step = knob.step;
+    const hint = document.createElement('small');
+    hint.textContent = knob.hint;
 
-    for (const [key, min, max, step] of SPECS.filter((s) => s[4] === group)) {
-      const row = document.createElement('label');
-      const name = document.createElement('span');
-      name.textContent = key.toLowerCase().replace(/_/g, ' ');
-      const value = document.createElement('b');
-      const input = document.createElement('input');
-      input.type = 'range';
-      input.min = min;
-      input.max = max;
-      input.step = step;
-      input.value = P[key];
-      value.textContent = fmt(P[key]);
+    const show = () => {
+      input.value = settings[knob.key];
+      value.textContent = fmt(settings[knob.key]) + (knob.unit || '');
+    };
+    input.addEventListener('input', () => {
+      settings[knob.key] = parseFloat(input.value);
+      value.textContent = fmt(settings[knob.key]) + (knob.unit || '');
+      applyToP(settings);
+      localStorage.setItem(STORE, JSON.stringify(settings));
+    });
 
-      input.addEventListener('input', () => {
-        P[key] = parseFloat(input.value);
-        value.textContent = fmt(P[key]);
-        save();
-      });
-
-      row.append(name, value, input);
-      panel.append(row);
-      rows.set(key, { input, value });
-    }
+    row.append(name, value, input, hint);
+    panel.append(row);
+    rows.set(knob.key, show);
+    show();
   }
 
-  const actions = document.createElement('div');
-  actions.className = 'tuner-actions';
+  const refresh = () => rows.forEach((show) => show());
 
   const copy = button('Copy as code', async () => {
-    const body = SPECS.map(([k]) => `  ${k}: ${fmt(P[k])},`).join('\n');
-    const text = `// paste over the matching lines in src/player.js\n${body}`;
+    const lines = [
+      'MAX_RUN', 'ACCEL', 'FRICTION', 'AIR_ACCEL', 'AIR_DRAG',
+      'JUMP_V', 'GRAVITY', 'FALL_MULT', 'MAX_FALL', 'APEX_VY', 'APEX_MULT',
+      'WALL_JUMP_VX', 'WALL_JUMP_VY',
+    ].map((k) => `  ${k}: ${fmt(P[k])},`);
+    const text = `// paste over the matching lines in src/player.js\n${lines.join('\n')}`;
     try {
       await navigator.clipboard.writeText(text);
-      copy.textContent = 'Copied';
-      setTimeout(() => (copy.textContent = 'Copy as code'), 1200);
+      flash(copy, 'Copied');
     } catch {
       console.log(text);
-      copy.textContent = 'Logged to console';
-      setTimeout(() => (copy.textContent = 'Copy as code'), 1600);
+      flash(copy, 'Logged to console');
     }
   });
 
   const reset = button('Reset', () => {
-    for (const [key, spec] of rows) {
-      P[key] = DEFAULTS[key];
-      spec.input.value = DEFAULTS[key];
-      spec.value.textContent = fmt(DEFAULTS[key]);
-    }
+    Object.assign(settings, DEFAULTS);
+    Object.assign(P, RAW);
+    refresh();
     localStorage.removeItem(STORE);
   });
 
+  const actions = document.createElement('div');
+  actions.className = 'tuner-actions';
   actions.append(copy, reset);
   panel.append(actions);
 
   const note = document.createElement('p');
   note.className = 'tuner-note';
-  note.textContent = 'The levels are built around the default numbers — turn the jump down far enough and some gaps stop being crossable.';
+  note.textContent =
+    'The levels are built around the defaults. Shrink the jump or the top speed much and some gaps stop being crossable.';
   panel.append(note);
 
-  // restore anything saved from a previous session
   try {
-    const saved = JSON.parse(localStorage.getItem(STORE) || '{}');
-    for (const [key, v] of Object.entries(saved)) {
-      if (!rows.has(key)) continue;
-      P[key] = v;
-      rows.get(key).input.value = v;
-      rows.get(key).value.textContent = fmt(v);
+    const saved = JSON.parse(localStorage.getItem(STORE) || 'null');
+    if (saved) {
+      for (const knob of KNOBS) {
+        if (typeof saved[knob.key] === 'number') settings[knob.key] = saved[knob.key];
+      }
+      applyToP(settings);
+      refresh();
     }
   } catch {
     /* ignore a corrupt blob */
@@ -121,12 +187,6 @@ export function buildTuner(panel, toggle) {
   addEventListener('keydown', (e) => {
     if (e.code === 'KeyT' && !e.repeat) setOpen(panel.classList.contains('hidden'));
   });
-
-  function save() {
-    const out = {};
-    for (const [key] of rows) out[key] = P[key];
-    localStorage.setItem(STORE, JSON.stringify(out));
-  }
 }
 
 function button(label, onClick) {
@@ -137,4 +197,8 @@ function button(label, onClick) {
   return b;
 }
 
-const fmt = (v) => (Number.isInteger(v) ? String(v) : String(Math.round(v * 100) / 100));
+function flash(el, text) {
+  const was = 'Copy as code';
+  el.textContent = text;
+  setTimeout(() => (el.textContent = was), 1400);
+}
