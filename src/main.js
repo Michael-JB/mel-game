@@ -22,7 +22,7 @@ const input = new Input();
 const player = new Player(LEVELS[0].spawnLeft);
 const robot = new Robot(LEVELS[0].spawnLeft);
 const cam = { x: 0, y: 0 };
-const HEAD_START = 470; // how far behind you it starts on each floor
+const GRACE = 3.5; // seconds before the drone drops in and starts hunting
 
 const clamp = (v, lo, hi) => (lo > hi ? (lo + hi) / 2 : Math.max(lo, Math.min(hi, v)));
 
@@ -30,6 +30,8 @@ let level, index, progress, blocks;
 let clock = 0; // drives the platform cycles; never resets, so they stay predictable
 let won = false;
 let arrest = null; // the arrest-and-jail sequence, once it has you
+let chaseAt = 0; // when the drone wakes up
+let armed = false; // ...and whether it has cleared the spawn yet
 let toastUntil = 0;
 let view, scale;
 
@@ -51,12 +53,21 @@ function loadLevel(i, entry) {
   level = LEVELS[i];
   const spawn = entry === 'right' ? level.spawnRight : level.spawnLeft;
   player.reset(spawn);
-  const chase = entry === 'right' ? HEAD_START : -HEAD_START;
-  robot.reset({ x: clamp(spawn.x + chase, 20, level.world.w - 60), y: spawn.y - 20 });
+  // It drops in where you came in — the only spot the level guarantees is
+  // standable — and stays inert until you have had a head start.
+  startChase(spawn);
   blocks = activeBlocks(level, clock, progress[i].hasKey); // so the first frame can draw
   cam.x = player.x + player.w / 2 - view.w / 2;
   cam.y = player.y + player.h / 2 - view.h / 2;
   hud();
+}
+
+/** Put the drone back at a known-good spot and give the runner a head start. */
+function startChase(at) {
+  robot.reset({ x: at.x, y: at.y });
+  chaseAt = clock + GRACE;
+  armed = false;
+  say('Patrol drone inbound — move.', 2.2);
 }
 
 function newRun() {
@@ -128,15 +139,19 @@ function update(dt, now) {
   player.update(dt, now, input, blocks);
 
   // the chase
-  const lost = robot.update(dt, now, blocks, player, level.world);
-  if (lost) {
-    robot.reset({ x: clamp(player.x - HEAD_START, 20, level.world.w - 60), y: player.y - 20 });
-    say('Another unit picks up the chase.', 1.6);
-  }
-  if (hits(player.box, robot.box)) {
-    arrest = { t: 0, x: player.x, y: player.y };
-    player.arrested = true;
-    return;
+  if (clock >= chaseAt) {
+    const lost = robot.update(dt, now, blocks, player, level.world);
+    const touching = hits(player.box, robot.box);
+    // never arrest you on the spawn itself, but don't let standing still save you
+    if (!armed && (!touching || clock > chaseAt + 2)) armed = true;
+    if (lost) {
+      startChase(level.spawnLeft);
+      say('Another unit picks up the chase.', 1.8);
+    } else if (armed && touching) {
+      arrest = { t: 0, x: player.x, y: player.y };
+      player.arrested = true;
+      return;
+    }
   }
 
   if (player.y > level.world.h + 200) {
@@ -205,9 +220,11 @@ function frame() {
   drawPortal(ctx, level, 1, progress[index].hasKey, clock);
   if (index > 0) drawPortal(ctx, level, -1, true, clock);
 
-  const rFloor = groundBelow(blocks, robot.box);
-  if (rFloor) robot.body.drawShadow(ctx, rFloor);
-  robot.draw(ctx);
+  if (clock >= chaseAt) {
+    const rFloor = groundBelow(blocks, robot.box);
+    if (rFloor) robot.body.drawShadow(ctx, rFloor);
+    robot.draw(ctx);
+  }
 
   const floor = groundBelow(blocks, player.box);
   if (floor) player.drawShadow(ctx, floor);

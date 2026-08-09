@@ -707,18 +707,19 @@ export function drawClimbMarks(ctx, level) {
 
 /**
  * Silhouettes between you and the level: bigger, darker and moving faster than
- * anything else, which is what gives the city depth on the near side.
+ * anything else, which is what gives the city depth on the near side. Each one
+ * carries a warm edge so it reads as an object rather than a smudge.
  */
 export function drawForeground(ctx, cam, view) {
   const depth = 1.45;
-  const offX = -cam.x * depth;
+  const offX = -cam.x * depth + 560; // nothing parks itself on the spot you start from
   const offY = -cam.y * depth * 0.12;
   const span = 1250;
   const first = Math.floor((-offX - span) / span);
 
   ctx.save();
-  ctx.fillStyle = 'rgba(9,7,20,0.92)';
-  ctx.strokeStyle = 'rgba(9,7,20,0.92)';
+  const ink = 'rgba(11,8,22,0.94)';
+  const rim = 'rgba(255,176,110,0.5)';
 
   for (let i = first; i < first + Math.ceil(view.w / span) + 3; i++) {
     const x = i * span + offX;
@@ -727,49 +728,66 @@ export function drawForeground(ctx, cam, view) {
 
     if (kind === 0) {
       // cable swag drooping across the top of frame
-      const y = 40 + r * 90 + offY;
+      const y = 34 + r * 80 + offY;
+      ctx.strokeStyle = ink;
       ctx.lineWidth = 7;
       ctx.beginPath();
-      ctx.moveTo(x - 200, y);
-      ctx.quadraticCurveTo(x + span / 2, y + 150 + r * 90, x + span + 200, y);
+      ctx.moveTo(x - 240, y);
+      ctx.quadraticCurveTo(x + span / 2, y + 150 + r * 90, x + span + 240, y);
       ctx.stroke();
       ctx.lineWidth = 4;
       ctx.beginPath();
-      ctx.moveTo(x - 200, y + 46);
-      ctx.quadraticCurveTo(x + span / 2, y + 210 + r * 90, x + span + 200, y + 46);
+      ctx.moveTo(x - 240, y + 44);
+      ctx.quadraticCurveTo(x + span / 2, y + 208 + r * 90, x + span + 240, y + 44);
       ctx.stroke();
     } else if (kind === 1) {
-      // the corner of a roof, cut in at the bottom of frame
-      const h = 150 + r * 130;
-      const w = 260 + r * 180;
-      ctx.fillRect(x, view.h - h + offY, w, h + 200);
-      ctx.fillRect(x - 14, view.h - h + offY, w + 28, 16);
-      // handrail on top of it
+      // the parapet of a roof between you and the level, with plant on it
+      const h = 70 + r * 40;
+      const w = 300 + r * 210;
+      // keep it in the bottom band whatever the camera is doing, so it frames
+      // the shot instead of swallowing it
+      const top = Math.max(view.h * 0.76, view.h - h + offY);
+      ctx.fillStyle = ink;
+      ctx.fillRect(x, top, w, h + 280);
+      ctx.fillRect(x - 12, top, w + 24, 15);
+      ctx.fillStyle = rim;
+      ctx.fillRect(x - 12, top, w + 24, 3);
+
+      ctx.fillStyle = ink; // an extract unit sat on it
+      ctx.fillRect(x + w * 0.24, top - 38, 92, 40);
+      ctx.fillStyle = rim;
+      ctx.fillRect(x + w * 0.24, top - 38, 92, 3);
+      ctx.strokeStyle = ink; // and a rail
       ctx.lineWidth = 6;
       ctx.beginPath();
-      ctx.moveTo(x + 20, view.h - h + offY);
-      ctx.lineTo(x + 20, view.h - h - 54 + offY);
-      ctx.moveTo(x + w - 20, view.h - h + offY);
-      ctx.lineTo(x + w - 20, view.h - h - 54 + offY);
-      ctx.moveTo(x + 20, view.h - h - 50 + offY);
-      ctx.lineTo(x + w - 20, view.h - h - 50 + offY);
+      ctx.moveTo(x + w - 40, top);
+      ctx.lineTo(x + w - 40, top - 52);
+      ctx.moveTo(x + w - 40, top - 48);
+      ctx.lineTo(x + w + 60, top - 48);
       ctx.stroke();
     } else {
       // a mast rising past the camera
-      const w = 34 + r * 26;
-      ctx.fillRect(x, -200 + offY, w, view.h * (0.35 + r * 0.3) + 200);
+      const w = 22 + r * 16;
+      const tall = view.h * (0.4 + r * 0.28);
+      ctx.fillStyle = ink;
+      ctx.fillRect(x, -200 + offY, w, tall + 200);
+      ctx.fillStyle = rim;
+      ctx.fillRect(x + w - 3, -200 + offY, 3, tall + 200);
+      ctx.strokeStyle = ink;
       ctx.lineWidth = 5;
       for (let k = 0; k < 4; k++) {
-        const y = 60 + k * 90 + offY;
+        const y = 70 + k * 96 + offY;
+        if (y > tall) break;
         ctx.beginPath();
-        ctx.moveTo(x - 26, y);
-        ctx.lineTo(x + w + 26, y - 16);
+        ctx.moveTo(x - 30, y);
+        ctx.lineTo(x + w + 30, y - 18);
         ctx.stroke();
       }
     }
   }
   ctx.restore();
 }
+
 
 // ---------------------------------------------------------------- interior
 
