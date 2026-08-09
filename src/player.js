@@ -320,7 +320,8 @@ export class Player {
     }
   }
 
-  draw(ctx) {
+  /** Where every limb is this frame — shared by the figure and its shadow. */
+  pose() {
     const cx = this.x + this.w / 2;
     const top = this.y;
     const hip = top + 28;
@@ -371,31 +372,80 @@ export class Player {
       armB = { x: cx - 8, y: shoulder + 13 + bob };
     }
 
-    ctx.save();
-    ctx.strokeStyle = '#1a1a1a';
-    ctx.fillStyle = '#1a1a1a';
-    ctx.lineWidth = 3;
+    return { cx, top, hip, shoulder, feet, f, legA, legB, armA, armB };
+  }
+
+  static stroke(ctx, p, width) {
+    ctx.lineWidth = width;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
     ctx.beginPath();
-    ctx.arc(cx, top + 7, 7, 0, Math.PI * 2);
+    ctx.arc(p.cx, p.top + 7, 7, 0, Math.PI * 2);
     ctx.stroke();
 
     ctx.beginPath();
-    ctx.moveTo(cx, top + 14);
-    ctx.lineTo(cx, hip);
-    ctx.moveTo(legA.x, legA.y);
-    ctx.lineTo(cx, hip);
-    ctx.lineTo(legB.x, legB.y);
-    ctx.moveTo(armA.x, armA.y);
-    ctx.lineTo(cx, shoulder);
-    ctx.lineTo(armB.x, armB.y);
+    ctx.moveTo(p.cx, p.top + 14);
+    ctx.lineTo(p.cx, p.hip);
+    ctx.moveTo(p.legA.x, p.legA.y);
+    ctx.lineTo(p.cx, p.hip);
+    ctx.lineTo(p.legB.x, p.legB.y);
+    ctx.moveTo(p.armA.x, p.armA.y);
+    ctx.lineTo(p.cx, p.shoulder);
+    ctx.lineTo(p.armB.x, p.armB.y);
     ctx.stroke();
+  }
 
-    // eye-line nub so you can tell which way he faces
+  draw(ctx) {
+    const p = this.pose();
+    ctx.save();
+
+    // sun is low and behind on the right: a warm edge on that side...
+    ctx.strokeStyle = 'rgba(255,198,130,0.85)';
+    ctx.translate(2.2, -1.4);
+    Player.stroke(ctx, p, 5);
+    ctx.translate(-2.2, 1.4);
+
+    // ...and cool bounce on the other
+    ctx.strokeStyle = 'rgba(120,150,205,0.5)';
+    ctx.translate(-2, 1);
+    Player.stroke(ctx, p, 4.5);
+    ctx.translate(2, -1);
+
+    ctx.strokeStyle = '#15161f';
+    ctx.fillStyle = '#15161f';
+    Player.stroke(ctx, p, 3.2);
+
     ctx.beginPath();
-    ctx.arc(cx + f * 4, top + 6, 1.6, 0, Math.PI * 2);
+    ctx.arc(p.cx + p.f * 4, p.top + 6, 1.6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /** Flattened onto whatever surface is underneath, plus a contact patch. */
+  drawShadow(ctx, block) {
+    const p = this.pose();
+    const gy = block.y;
+    const drop = Math.max(0, gy - (this.y + this.h));
+
+    ctx.save();
+    ctx.beginPath(); // never let a shadow stray off its surface into the sky
+    ctx.rect(block.x, gy - 12, block.w, block.h + 40);
+    ctx.clip();
+
+    // the long one: a low sun smears the figure sideways and almost flat
+    ctx.globalAlpha = Math.max(0.1, 0.42 - drop / 900);
+    ctx.strokeStyle = '#191131';
+    ctx.save();
+    ctx.transform(1, 0, 1.55, 0.1, -1.55 * gy, gy * 0.9);
+    Player.stroke(ctx, p, 7);
+    ctx.restore();
+
+    // and the dark patch right where he meets it
+    ctx.globalAlpha = Math.max(0, 0.5 - drop / 320);
+    ctx.fillStyle = '#191131';
+    ctx.beginPath();
+    ctx.ellipse(p.cx - 5, gy + 2, 15 + drop * 0.03, 4.5, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }

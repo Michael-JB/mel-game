@@ -1,7 +1,8 @@
 import { Input } from './input.js';
 import { Player } from './player.js';
 import { LEVELS, activeBlocks, moverAt } from './levels.js';
-import { drawBackground, drawLevel, drawKey, drawPortal } from './render.js';
+import { drawBackground, drawSceneShell, drawLevel, drawKey, drawPortal, drawGrade } from './render.js';
+import { groundBelow } from './scene.js';
 import { buildTuner } from './tuner.js';
 
 const canvas = document.getElementById('game');
@@ -42,6 +43,7 @@ function loadLevel(i, entry) {
   index = i;
   level = LEVELS[i];
   player.reset(entry === 'right' ? level.spawnRight : level.spawnLeft);
+  blocks = activeBlocks(level, clock, progress[i].hasKey); // so the first frame can draw
   cam.x = player.x + player.w / 2 - view.w / 2;
   cam.y = player.y + player.h / 2 - view.h / 2;
   hud();
@@ -164,15 +166,20 @@ function frame() {
   }
   followCamera(frameDt);
 
-  drawBackground(ctx, cam, view, level.world);
+  drawBackground(ctx, cam, view, level);
   ctx.save();
   ctx.translate(-Math.round(cam.x), -Math.round(cam.y));
+  drawSceneShell(ctx, level, cam, view);
   drawLevel(ctx, level, clock);
   if (!progress[index].hasKey) drawKey(ctx, level.key, clock);
   drawPortal(ctx, level, 1, progress[index].hasKey, clock);
   if (index > 0) drawPortal(ctx, level, -1, true, clock);
+
+  const floor = groundBelow(blocks, player.box);
+  if (floor) player.drawShadow(ctx, floor);
   player.draw(ctx);
   ctx.restore();
+  drawGrade(ctx, view);
 
   requestAnimationFrame(frame);
 }
@@ -186,5 +193,9 @@ window.__game = {
   LEVELS,
   at: () => ({ index, level: level.name, progress, clock }),
   goto: (i, entry) => loadLevel(i, entry),
-  tp: (x, y) => player.reset({ x, y }),
+  tp: (x, y) => {
+    player.reset({ x, y });
+    cam.x = clamp(x + player.w / 2 - view.w / 2, 0, level.world.w - view.w);
+    cam.y = clamp(y + player.h / 2 - view.h / 2, 0, level.world.h - view.h);
+  },
 };

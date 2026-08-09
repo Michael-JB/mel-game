@@ -12,7 +12,9 @@
 // map is the way out: with the key it is a portal, without it a wall. The left
 // edge takes you back to the previous level.
 
-const solid = (x, y, w, h, extra) => ({ x, y, w, h, oneWay: false, ...extra });
+// `style` is purely visual: roof = a building whose facade runs on down out of
+// sight, tower = a slim structure on top of one, floor/column = interior concrete.
+const solid = (x, y, w, h, style = 'slab', extra) => ({ x, y, w, h, oneWay: false, style, ...extra });
 const ledge = (x, y, w, h = 20) => ({ x, y, w, h, oneWay: true });
 const blinker = (x, y, w, period, on, offset, h = 20) => ({
   x, y, w, h,
@@ -25,7 +27,7 @@ const mover = (x, y, w, h, dx, dy, period, offset = 0) => ({
   move: { dx, dy, period, offset },
 });
 
-const bound = (x, h = 2600) => solid(x, -700, 40, h, { hidden: true });
+const bound = (x, h = 2600) => solid(x, -700, 40, h, 'slab', { hidden: true });
 
 /** Is a cycling platform solid right now? */
 export function cycleOn(cycle, t) {
@@ -62,6 +64,7 @@ export function activeBlocks(level, t, hasKey) {
 
 const one = {
   name: 'The Well',
+  setting: 'exterior',
   world: { w: 3200, h: 1500 },
   spawnLeft: { x: 60, y: 1230 },
   spawnRight: { x: 3140, y: 830 },
@@ -70,18 +73,18 @@ const one = {
     bound(-40),
 
     // the well: a chimney is the only way out
-    solid(0, 1300, 460, 200),
-    solid(260, 900, 60, 320), // stops short of the floor: walk in underneath
-    solid(420, 900, 60, 400),
+    solid(0, 1300, 460, 200, 'roof'),
+    solid(260, 900, 60, 320, 'tower'), // stops short of the floor: walk in underneath
+    solid(420, 900, 60, 400, 'tower'),
 
-    solid(480, 900, 620, 200), // first shelf   (void from 1100 to 1420)
-    solid(1420, 900, 520, 200), // second shelf (void from 1940 to 2260)
+    solid(480, 900, 620, 200, 'roof'), // first roof   (void from 1100 to 1420)
+    solid(1420, 900, 520, 200, 'roof'), // second roof (void from 1940 to 2260)
 
-    // the tower on the second shelf, with the key on top
-    solid(1600, 180, 60, 640),
-    solid(1780, 240, 60, 660),
+    // the service tower on the second roof, with the key on top
+    solid(1600, 180, 60, 640, 'tower'),
+    solid(1780, 240, 60, 660, 'tower'),
 
-    solid(2260, 900, 940, 200), // the run-out to the portal
+    solid(2260, 900, 940, 200, 'roof'), // the run-out to the portal
   ],
 
   platforms: [
@@ -97,19 +100,20 @@ const one = {
 
 const two = {
   name: 'The Chasm',
+  setting: 'exterior',
   world: { w: 2800, h: 1400 },
   spawnLeft: { x: 60, y: 720 },
   spawnRight: { x: 2730, y: 620 },
 
   solids: [
-    solid(0, 800, 300, 40),
-    solid(1380, 780, 420, 40), // the far side
+    solid(0, 800, 300, 40, 'roof'),
+    solid(1380, 780, 420, 40, 'roof'), // the far side
 
-    // the chimney to the key
-    solid(1560, 200, 60, 500),
-    solid(1740, 260, 60, 520),
+    // the rooftop shaft to the key
+    solid(1560, 200, 60, 500, 'tower'),
+    solid(1740, 260, 60, 520, 'tower'),
 
-    solid(2400, 700, 400, 40), // the ledge the portal opens onto
+    solid(2400, 700, 400, 40, 'roof'), // the roof the window opens off
   ],
 
   platforms: [
@@ -126,6 +130,8 @@ const two = {
   ],
 
   key: { x: 1590, y: 130, r: 14 },
+  // you leave this one by diving through a window into the block next door
+  exit: { style: 'window', y: 700, h: 210 },
 };
 
 // ---------------------------------------------------------------- level 3
@@ -133,21 +139,24 @@ const two = {
 // reaches, plus one ledge to break the fall out of the spire.
 
 const three = {
-  name: 'The Spire',
+  name: 'The Vacant Floors',
+  setting: 'interior',
+  // the back wall of the office block, and the panes punched into it
+  windows: { from: 0, spacing: 340, mullion: 52, top: 260, bottom: 1240 },
   world: { w: 2600, h: 1800 },
   spawnLeft: { x: 60, y: 1320 },
   spawnRight: { x: 2520, y: 830 },
 
   solids: [
-    solid(0, 1400, 700, 200),
-    solid(1180, 1400, 420, 200),
+    solid(0, 1400, 700, 200, 'floor'),
+    solid(1180, 1400, 420, 200, 'floor'),
 
-    // the spire — a 1100-unit climb to the key
-    solid(1250, 300, 60, 1020),
-    solid(1430, 360, 60, 1040),
+    // the lift shaft — a 1100-unit climb to the key
+    solid(1250, 300, 60, 1020, 'column'),
+    solid(1430, 360, 60, 1040, 'column'),
 
-    solid(1600, 560, 110, 20), // the one static step on the way down
-    solid(2500, 900, 100, 200), // the shelf the portal opens onto
+    solid(1600, 560, 110, 20, 'slab'), // the one static step on the way down
+    solid(2500, 900, 100, 200, 'floor'), // the mezzanine the portal opens off
   ],
 
   platforms: [
@@ -157,6 +166,8 @@ const three = {
   ],
 
   key: { x: 1280, y: 230, r: 14 },
+  // ...and arrive on the inside of that same broken pane
+  entry: { style: 'window', y: 1400, h: 210, inside: true },
 };
 
 export const LEVELS = [one, two, three];
