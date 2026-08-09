@@ -1,12 +1,13 @@
 export const P = {
   W: 22,
   H: 44,
-  MAX_RUN: 360,
-  ACCEL: 2400,
-  AIR_ACCEL: 1600,
-  FRICTION: 2800,
-  AIR_DRAG: 300,
-  JUMP_V: 790,
+  // Momentum: it takes a beat to wind up to full speed, and a beat to shed it.
+  MAX_RUN: 340,
+  ACCEL: 1150,
+  AIR_ACCEL: 850,
+  FRICTION: 1500,
+  AIR_DRAG: 200,
+  JUMP_V: 700,
   JUMP_CUT: 0.45, // vy kept when the jump key is released early
   MAX_FALL: 1500,
   COYOTE: 0.1,
@@ -55,6 +56,7 @@ export class Player {
     this.w = P.W;
     this.h = P.H;
     this.grounded = false;
+    this.groundId = null; // which platform we are standing on, if it has an id
     this.facing = 1;
     this.stride = 0; // run-cycle phase
     this.groundedAt = -Infinity;
@@ -296,6 +298,7 @@ export class Player {
     const prevBottom = this.y + this.h;
     this.y += dy;
     this.grounded = false;
+    this.groundId = null;
     for (const b of blocks) {
       if (!overlaps(this.box, b)) continue;
       if (b.oneWay) {
@@ -303,11 +306,13 @@ export class Player {
         this.y = b.y - this.h;
         this.vy = 0;
         this.grounded = true;
+        this.groundId = b.id ?? null;
         continue;
       }
       if (dy > 0) {
         this.y = b.y - this.h;
         this.grounded = true;
+        this.groundId = b.id ?? null;
       } else if (dy < 0) {
         this.y = b.y + b.h;
       }

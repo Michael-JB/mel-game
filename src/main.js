@@ -1,7 +1,8 @@
 import { Input } from './input.js';
 import { Player } from './player.js';
-import { LEVELS, activeBlocks } from './levels.js';
+import { LEVELS, activeBlocks, moverAt } from './levels.js';
 import { drawBackground, drawLevel, drawKey, drawPortal } from './render.js';
+import { buildTuner } from './tuner.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -70,6 +71,7 @@ function resize() {
 addEventListener('resize', resize);
 resize();
 newRun();
+buildTuner(document.getElementById('tuner'), document.getElementById('tuner-toggle'));
 
 const clamp = (v, lo, hi) => (lo > hi ? (lo + hi) / 2 : Math.max(lo, Math.min(hi, v)));
 
@@ -91,6 +93,18 @@ function update(dt, now) {
   if (won) return;
   const here = progress[index];
   blocks = activeBlocks(level, clock, here.hasKey);
+
+  // a platform you are standing on takes you with it
+  if (player.groundId) {
+    const ride = level.platforms.find((p) => p.id === player.groundId);
+    if (ride && ride.move) {
+      const was = moverAt(ride, clock - dt);
+      const is = moverAt(ride, clock);
+      player.x += is.x - was.x;
+      player.y += is.y - was.y;
+    }
+  }
+
   player.update(dt, now, input, blocks);
 
   if (player.y > level.world.h + 200) {
@@ -138,13 +152,13 @@ function frame() {
   const frameDt = Math.min(0.05, now - last);
   acc += Math.min(0.25, now - last);
   last = now;
-  clock += frameDt;
   if (toastUntil && clock > toastUntil) {
     toast.classList.add('hidden');
     toastUntil = 0;
   }
 
   while (acc >= STEP) {
+    clock += STEP; // stays in lockstep with the physics so platforms are exact
     update(STEP, now);
     acc -= STEP;
   }

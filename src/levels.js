@@ -1,11 +1,16 @@
-// Three levels, all built from the same pieces:
+// Three levels. The rule for every one of them: there is a single route, and
+// every platform on it is load-bearing — take any one away and the level cannot
+// be finished. Gaps that must be crossed are wider than a jump (~190 units);
+// gaps that must be jumpable are 130 or less.
+//
 //   solid   — blocks you can stand on, bonk into, wall-jump off and grab the lip of
 //   ledge   — one-way: you pass up through it and land on top
 //   blinker — a one-way ledge that comes and goes on a fixed cycle
+//   mover   — a one-way ledge that slides back and forth along a fixed track
 //
-// Every level hides its key near the top of the map. The whole right edge of the
-// map is the way out: with the key it is a portal to the next level, without it a
-// wall. The left edge takes you back to the previous level.
+// Every level hides its key at the top of a chimney. The whole right edge of the
+// map is the way out: with the key it is a portal, without it a wall. The left
+// edge takes you back to the previous level.
 
 const solid = (x, y, w, h, extra) => ({ x, y, w, h, oneWay: false, ...extra });
 const ledge = (x, y, w, h = 20) => ({ x, y, w, h, oneWay: true });
@@ -13,6 +18,11 @@ const blinker = (x, y, w, period, on, offset, h = 20) => ({
   x, y, w, h,
   oneWay: true,
   cycle: { period, on, offset },
+});
+const mover = (x, y, w, h, dx, dy, period, offset = 0) => ({
+  x, y, w, h,
+  oneWay: true,
+  move: { dx, dy, period, offset },
 });
 
 const bound = (x, h = 2600) => solid(x, -700, 40, h, { hidden: true });
@@ -28,11 +38,19 @@ export function cycleLeft(cycle, t) {
   return p < cycle.on ? cycle.on - p : cycle.period - p;
 }
 
+/** Where a moving platform is right now — a smooth there-and-back. */
+export function moverAt(p, t) {
+  const phase = ((t + p.move.offset) / p.move.period) % 1;
+  const s = (1 - Math.cos(phase * Math.PI * 2)) / 2;
+  return { ...p, x: p.x + p.move.dx * s, y: p.y + p.move.dy * s };
+}
+
 /** Everything the physics should collide with this frame. */
 export function activeBlocks(level, t, hasKey) {
   const out = level.solids.slice();
   for (const p of level.platforms) {
-    if (!p.cycle || cycleOn(p.cycle, t)) out.push(p);
+    if (p.cycle && !cycleOn(p.cycle, t)) continue;
+    out.push(p.move ? moverAt(p, t) : p);
   }
   // the exit is sealed until you have the key
   if (!hasKey) out.push(bound(level.world.w, level.world.h + 1600));
@@ -40,134 +58,108 @@ export function activeBlocks(level, t, hasKey) {
 }
 
 // ---------------------------------------------------------------- level 1
+// Wall-climb out of the well, cross two voids on blinkers, climb the tower.
 
 const one = {
   name: 'The Well',
-  world: { w: 3600, h: 1560 },
-  spawnLeft: { x: 60, y: 1330 },
-  spawnRight: { x: 3540, y: 920 },
-  closedLeft: true, // nothing before this level
+  world: { w: 3200, h: 1500 },
+  spawnLeft: { x: 60, y: 1230 },
+  spawnRight: { x: 3140, y: 830 },
 
   solids: [
     bound(-40),
 
-    // the starting well — the chimney out of it is the only exit.
-    // Overhangs stop short of the floor so you can walk in underneath them.
-    solid(0, 1400, 520, 80),
-    solid(240, 1000, 60, 320),
-    solid(400, 1000, 60, 400),
+    // the well: a chimney is the only way out
+    solid(0, 1300, 460, 200),
+    solid(260, 900, 60, 320), // stops short of the floor: walk in underneath
+    solid(420, 900, 60, 400),
 
-    // surface, split by a gap
-    solid(460, 1000, 740, 120),
-    solid(1400, 1000, 600, 120),
+    solid(480, 900, 620, 200), // first shelf   (void from 1100 to 1420)
+    solid(1420, 900, 520, 200), // second shelf (void from 1940 to 2260)
 
-    // two pillars with a chimney between them
-    solid(1530, 700, 60, 220),
-    solid(1700, 600, 60, 400),
+    // the tower on the second shelf, with the key on top
+    solid(1600, 180, 60, 640),
+    solid(1780, 240, 60, 660),
 
-    // stair up to the plateau — a fat slab, then a thin one
-    solid(1860, 620, 220, 34),
-    solid(2150, 548, 110, 18),
-    solid(2360, 660, 400, 120),
-
-    // the tower on the plateau: climb it for the key
-    solid(2400, 140, 60, 440),
-    solid(2600, 200, 60, 460),
-
-    // the run-out to the portal
-    solid(2900, 1000, 700, 120),
+    solid(2260, 900, 940, 200), // the run-out to the portal
   ],
 
   platforms: [
-    ledge(700, 880, 90, 16),
-    ledge(870, 792, 150, 26),
-    ledge(1080, 700, 64, 14),
-    blinker(1240, 940, 130, 3.6, 2.2, 0, 22),
-    blinker(2790, 880, 100, 3.0, 1.9, 0.7, 18),
+    blinker(1200, 860, 120, 3.6, 2.2, 0.0, 22),
+    blinker(2040, 860, 120, 3.2, 2.0, 1.4, 22),
   ],
 
-  // sits above the tower's left wall: top out, then one last hop
-  key: { x: 2430, y: 60, r: 14 },
+  key: { x: 1630, y: 110, r: 14 },
 };
 
 // ---------------------------------------------------------------- level 2
+// No ground at all. Six blinkers, each one the only way past its gap.
 
 const two = {
   name: 'The Chasm',
-  world: { w: 3000, h: 1500 },
-  spawnLeft: { x: 60, y: 820 },
-  spawnRight: { x: 2930, y: 620 },
-  // no ground anywhere: everything here is a fall
+  world: { w: 2800, h: 1400 },
+  spawnLeft: { x: 60, y: 720 },
+  spawnRight: { x: 2730, y: 620 },
 
   solids: [
-    solid(0, 900, 320, 40), // arrival ledge
-    solid(1180, 860, 500, 40), // the far side of the chasm
+    solid(0, 800, 300, 40),
+    solid(1380, 780, 420, 40), // the far side
 
     // the chimney to the key
-    solid(1440, 200, 60, 580),
-    solid(1620, 300, 60, 560),
+    solid(1560, 200, 60, 500),
+    solid(1740, 260, 60, 520),
 
-    solid(2340, 700, 660, 40), // the platform the portal opens onto
+    solid(2400, 700, 400, 40), // the ledge the portal opens onto
   ],
 
   platforms: [
-    // The crossing: nothing under these, and they all come and go. The phases
-    // are staggered so consecutive pairs overlap for about a second — enough to
-    // cross if you go when the next one appears, not enough to dawdle.
-    blinker(400, 880, 130, 3.4, 2.4, 0.0, 24),
-    blinker(620, 830, 80, 3.4, 2.4, 1.1, 16),
-    blinker(790, 876, 150, 3.4, 2.4, 2.2, 30),
-    blinker(1010, 806, 90, 3.4, 2.4, 0.6, 18),
+    // the crossing — staggered so consecutive pairs are up together for about
+    // a second: long enough to keep moving, not long enough to wait
+    blinker(430, 780, 110, 3.4, 2.4, 0.0, 24),
+    blinker(670, 740, 100, 3.4, 2.4, 1.1, 18),
+    blinker(900, 790, 120, 3.4, 2.4, 2.2, 30),
+    blinker(1150, 730, 100, 3.4, 2.4, 0.6, 16),
 
     // the way down to the portal
-    blinker(1780, 420, 140, 3.2, 2.2, 0.4, 26),
-    blinker(1990, 532, 80, 3.2, 2.2, 1.5, 16),
-    blinker(2160, 644, 120, 3.2, 2.2, 2.6, 22),
+    blinker(1930, 420, 110, 3.2, 2.2, 0.4, 26),
+    blinker(2170, 560, 100, 3.2, 2.2, 1.7, 20),
   ],
 
-  key: { x: 1470, y: 110, r: 14 },
+  key: { x: 1590, y: 130, r: 14 },
 };
 
 // ---------------------------------------------------------------- level 3
+// Moving platforms. Three of them, each ferrying you over a gap nothing else
+// reaches, plus one ledge to break the fall out of the spire.
 
 const three = {
   name: 'The Spire',
-  world: { w: 2800, h: 1900 },
-  spawnLeft: { x: 60, y: 1420 },
-  spawnRight: { x: 2730, y: 1040 },
+  world: { w: 2600, h: 1800 },
+  spawnLeft: { x: 60, y: 1320 },
+  spawnRight: { x: 2520, y: 830 },
 
   solids: [
-    solid(0, 1500, 900, 120),
-    solid(1100, 1500, 600, 120),
-    solid(1900, 1500, 700, 120), // stops short of the edge: the portal is up high
+    solid(0, 1400, 700, 200),
+    solid(1180, 1400, 420, 200),
 
-    // the spire: one long chimney, ~1200 units of climbing
-    solid(1300, 320, 60, 1100),
-    solid(1480, 200, 60, 1300),
+    // the spire — a 1100-unit climb to the key
+    solid(1250, 300, 60, 1020),
+    solid(1430, 360, 60, 1040),
 
-    solid(2540, 1120, 260, 40), // the shelf the portal opens onto
+    solid(1600, 560, 110, 20), // the one static step on the way down
+    solid(2500, 900, 100, 200), // the shelf the portal opens onto
   ],
 
   platforms: [
-    blinker(950, 1400, 120, 3.0, 1.8, 0.0),
-    blinker(1750, 1400, 120, 3.0, 1.8, 1.4),
-
-    // rest stops inside the chimney — one-way, so they never block the climb
-    blinker(1360, 1120, 120, 4.0, 2.4, 0.0, 16),
-    blinker(1360, 760, 120, 4.0, 2.4, 2.0, 16),
-
-    // the descent
-    ledge(1660, 520, 90, 14),
-    blinker(1830, 700, 160, 3.4, 2.1, 0.8, 30),
-    ledge(2030, 900, 70, 16),
-
-    // ...and the steps back up to the shelf
-    blinker(2160, 1380, 110, 3.4, 2.1, 1.2, 20),
-    ledge(2340, 1270, 110, 18),
-    ledge(2380, 1150, 90, 16),
+    mover(760, 1360, 120, 24, 300, 0, 7.0, 0.0), // ferry across the entry void
+    mover(1780, 660, 110, 22, 320, 0, 6.4, 1.2), // ferry east over the deep
+    mover(2280, 1100, 110, 22, 0, -280, 5.0, 0.5), // lift up to the shelf
   ],
 
-  key: { x: 1510, y: 90, r: 14 },
+  key: { x: 1280, y: 230, r: 14 },
 };
 
 export const LEVELS = [one, two, three];
+
+// stable ids so the player can tell which platform it is riding
+LEVELS.forEach((lv, li) => lv.platforms.forEach((p, pi) => (p.id = `${li}:${pi}`)));

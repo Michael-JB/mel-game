@@ -1,4 +1,4 @@
-import { cycleOn, cycleLeft } from './levels.js';
+import { cycleOn, cycleLeft, moverAt } from './levels.js';
 
 const INK = '#1a1a1a';
 const PAPER = '#f2f0eb';
@@ -42,13 +42,13 @@ export function drawLevel(ctx, level, t) {
   }
 
   for (const p of level.platforms) {
+    if (p.move) {
+      drawTrack(ctx, p);
+      slab(ctx, moverAt(p, t));
+      continue;
+    }
     if (!p.cycle) {
-      ctx.lineWidth = 3;
-      ctx.setLineDash([]);
-      ctx.fillStyle = PAPER;
-      ctx.strokeStyle = INK;
-      ctx.fillRect(p.x, p.y, p.w, p.h);
-      ctx.strokeRect(p.x + 1.5, p.y + 1.5, p.w - 3, p.h - 3);
+      slab(ctx, p);
       continue;
     }
 
@@ -59,12 +59,7 @@ export function drawLevel(ctx, level, t) {
       // solid, but flashes for the last stretch before it drops away
       const warn = left < 0.9 && Math.floor(left * 8) % 2 === 0;
       ctx.globalAlpha = warn ? 0.35 : 1;
-      ctx.lineWidth = 3;
-      ctx.setLineDash([]);
-      ctx.fillStyle = PAPER;
-      ctx.strokeStyle = INK;
-      ctx.fillRect(p.x, p.y, p.w, p.h);
-      ctx.strokeRect(p.x + 1.5, p.y + 1.5, p.w - 3, p.h - 3);
+      slab(ctx, p);
     } else {
       // ghost outline: it is coming back, and you can see when
       ctx.globalAlpha = left < 0.7 ? 0.5 : 0.22;
@@ -76,6 +71,35 @@ export function drawLevel(ctx, level, t) {
     ctx.restore();
   }
   ctx.setLineDash([]);
+}
+
+function slab(ctx, p) {
+  ctx.lineWidth = 3;
+  ctx.setLineDash([]);
+  ctx.fillStyle = PAPER;
+  ctx.strokeStyle = INK;
+  ctx.fillRect(p.x, p.y, p.w, p.h);
+  ctx.strokeRect(p.x + 1.5, p.y + 1.5, p.w - 3, p.h - 3);
+}
+
+/** The rail a moving platform runs along, so you can read where it is going. */
+function drawTrack(ctx, p) {
+  const { dx, dy } = p.move;
+  ctx.save();
+  ctx.strokeStyle = 'rgba(26,26,26,0.3)';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([6, 7]);
+  ctx.beginPath();
+  ctx.moveTo(p.x + p.w / 2, p.y + p.h / 2);
+  ctx.lineTo(p.x + dx + p.w / 2, p.y + dy + p.h / 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  for (const [ex, ey] of [[p.x, p.y], [p.x + dx, p.y + dy]]) {
+    ctx.beginPath();
+    ctx.arc(ex + p.w / 2, ey + p.h / 2, 3.5, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 export function drawKey(ctx, key, t) {
