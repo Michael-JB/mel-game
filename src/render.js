@@ -103,59 +103,45 @@ export function drawKey(ctx, key, t) {
   ctx.restore();
 }
 
-export function drawGate(ctx, gate, open, t) {
-  const lift = open ? gate.h * 0.62 : 0; // bars retract upward once unlocked
-  ctx.save();
-  ctx.lineWidth = 3;
-  ctx.lineCap = 'round';
-  ctx.strokeStyle = INK;
-
-  // posts stay put
-  ctx.beginPath();
-  ctx.moveTo(gate.x - 6, gate.y - 8);
-  ctx.lineTo(gate.x - 6, gate.y + gate.h);
-  ctx.moveTo(gate.x + gate.w + 6, gate.y - 8);
-  ctx.lineTo(gate.x + gate.w + 6, gate.y + gate.h);
-  ctx.moveTo(gate.x - 12, gate.y - 8);
-  ctx.lineTo(gate.x + gate.w + 12, gate.y - 8);
-  ctx.stroke();
+/**
+ * The whole map edge is the doorway: side 1 = the right edge (on to the next
+ * level), side -1 = the left edge (back to the previous one).
+ */
+export function drawPortal(ctx, level, side, open, t) {
+  const band = 30;
+  const x0 = side > 0 ? level.world.w - band : 0;
+  const h = level.world.h;
 
   ctx.save();
   ctx.beginPath();
-  ctx.rect(gate.x - 4, gate.y - 8, gate.w + 8, gate.h + 8);
+  ctx.rect(x0, -400, band, h + 800);
   ctx.clip();
-  ctx.translate(0, -lift);
-  ctx.strokeStyle = open ? '#c99700' : INK;
-  ctx.lineWidth = 4;
+
+  ctx.fillStyle = open ? 'rgba(201,151,0,0.13)' : 'rgba(26,26,26,0.07)';
+  ctx.fillRect(x0, -400, band, h + 800);
+
+  // stripes drift toward the edge when the way is open, and sit still when not
+  const drift = open ? (t * 60) % 34 : 0;
+  ctx.strokeStyle = open ? 'rgba(201,151,0,0.75)' : 'rgba(26,26,26,0.28)';
+  ctx.lineWidth = open ? 4 : 2;
   ctx.beginPath();
-  for (let i = 0; i <= 2; i++) {
-    const x = gate.x + 3 + (i * (gate.w - 6)) / 2;
-    ctx.moveTo(x, gate.y);
-    ctx.lineTo(x, gate.y + gate.h);
-  }
-  for (let i = 1; i <= 2; i++) {
-    const y = gate.y + (i * gate.h) / 3;
-    ctx.moveTo(gate.x, y);
-    ctx.lineTo(gate.x + gate.w, y);
+  for (let y = -420; y < h + 800; y += 34) {
+    const yy = y + drift * side;
+    ctx.moveTo(x0 - 6, yy);
+    ctx.lineTo(x0 + band + 6, yy + 16 * side);
   }
   ctx.stroke();
   ctx.restore();
 
-  if (open) {
-    ctx.globalAlpha = 0.3 + Math.sin(t * 4) * 0.15;
-    ctx.strokeStyle = '#c99700';
-    ctx.lineWidth = 4;
-    ctx.strokeRect(gate.x - 10, gate.y - 10, gate.w + 20, gate.h + 20);
-  } else {
-    // padlock
-    ctx.strokeStyle = INK;
-    ctx.lineWidth = 2.5;
-    const cx = gate.x + gate.w / 2;
-    const cy = gate.y + gate.h / 2;
-    ctx.strokeRect(cx - 7, cy - 3, 14, 12);
-    ctx.beginPath();
-    ctx.arc(cx, cy - 3, 4.5, Math.PI, 0);
-    ctx.stroke();
-  }
+  ctx.save();
+  ctx.strokeStyle = open ? '#c99700' : 'rgba(26,26,26,0.45)';
+  ctx.lineWidth = open ? 5 : 3;
+  ctx.setLineDash(open ? [] : [10, 8]);
+  const edge = side > 0 ? level.world.w - 2 : 2;
+  ctx.beginPath();
+  ctx.moveTo(edge, -400);
+  ctx.lineTo(edge, h + 400);
+  ctx.stroke();
+  ctx.setLineDash([]);
   ctx.restore();
 }

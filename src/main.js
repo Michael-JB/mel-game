@@ -1,7 +1,7 @@
 import { Input } from './input.js';
 import { Player } from './player.js';
 import { LEVELS, activeBlocks } from './levels.js';
-import { drawBackground, drawLevel, drawKey, drawGate } from './render.js';
+import { drawBackground, drawLevel, drawKey, drawPortal } from './render.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -107,18 +107,18 @@ function update(dt, now) {
     }
   }
 
-  // back to the previous level through the left edge
-  if (index > 0 && player.x < 0) {
+  // the left edge is the way back
+  if (index > 0 && player.x <= 0) {
     loadLevel(index - 1, 'right');
     return;
   }
 
-  // a locked gate is solid, so test a slightly padded box for the "locked" nudge
-  const g = level.gate;
-  const near = here.hasKey ? g : { x: g.x - 6, y: g.y - 6, w: g.w + 12, h: g.h + 12 };
-  if (hits(player.box, near)) {
+  // the right edge is the way on — sealed by an invisible wall until you have
+  // the key, so without it you can only ever touch it
+  const atEdge = player.x + player.w >= level.world.w - 2;
+  if (atEdge) {
     if (!here.hasKey) {
-      if (clock > toastUntil) say('Locked. Find the key — try higher up.');
+      if (clock > toastUntil) say('Sealed. The key is somewhere near the top.');
     } else if (index + 1 < LEVELS.length) {
       loadLevel(index + 1, 'left');
       return;
@@ -155,7 +155,8 @@ function frame() {
   ctx.translate(-Math.round(cam.x), -Math.round(cam.y));
   drawLevel(ctx, level, clock);
   if (!progress[index].hasKey) drawKey(ctx, level.key, clock);
-  drawGate(ctx, level.gate, progress[index].hasKey, clock);
+  drawPortal(ctx, level, 1, progress[index].hasKey, clock);
+  if (index > 0) drawPortal(ctx, level, -1, true, clock);
   player.draw(ctx);
   ctx.restore();
 

@@ -1,23 +1,29 @@
 export const P = {
   W: 22,
   H: 44,
-  GRAVITY: 2200,
-  MAX_RUN: 330,
+  MAX_RUN: 360,
   ACCEL: 2400,
-  AIR_ACCEL: 1500,
+  AIR_ACCEL: 1600,
   FRICTION: 2800,
   AIR_DRAG: 300,
-  JUMP_V: 760,
+  JUMP_V: 790,
   JUMP_CUT: 0.45, // vy kept when the jump key is released early
-  MAX_FALL: 1300,
+  MAX_FALL: 1500,
   COYOTE: 0.1,
   BUFFER: 0.12,
 
+  // Weighty arc: normal gravity on the way up, much heavier on the way down,
+  // and a lull around the apex so a jump hangs before it drops.
+  GRAVITY: 2300,
+  FALL_MULT: 1.8,
+  APEX_VY: 110,
+  APEX_MULT: 0.42,
+
   // walls
   SLIDE_SPEED: 130, // fall speed while hugging a wall
-  WALL_JUMP_VY: 820,
-  WALL_JUMP_VX: 380,
-  WALL_LOCK: 0.12, // steering is disabled this long after a wall jump
+  WALL_JUMP_VY: 800,
+  WALL_JUMP_VX: 190, // a gentle nudge: you can steer back and climb one wall
+  WALL_LOCK: 0.09, // steering is disabled this long after a wall jump
   WALL_COYOTE: 0.1,
   PROBE: 3, // how far to reach when looking for a wall
 
@@ -26,7 +32,12 @@ export const P = {
   GRAB_DOWN: 20, // ...and how far below
   GRAB_HANG: 2, // where our head sits relative to the lip once we're on it
   GRAB_COOLDOWN: 0.28,
+  CLIMB_TIME: 0.42, // pulling up over a lip, start to finish
 };
+
+const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
+const easeOut = (v) => 1 - (1 - v) * (1 - v);
+const easeInOut = (v) => (v < 0.5 ? 2 * v * v : 1 - 2 * (1 - v) * (1 - v));
 
 const overlaps = (a, b) =>
   a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
@@ -55,6 +66,16 @@ export class Player {
     this.hang = null; // the block whose lip we're hanging from
     this.hangDir = 0;
     this.grabBlockedUntil = -Infinity;
+    this.climb = null; // in-progress pull-up over a lip
+    this.climbPhase = 0;
+  }
+
+  /** Heavier coming down than going up, and light around the apex. */
+  gravity() {
+    let g = P.GRAVITY;
+    if (this.vy > 0) g *= P.FALL_MULT;
+    if (Math.abs(this.vy) < P.APEX_VY) g *= P.APEX_MULT;
+    return g;
   }
 
   get box() {
@@ -110,6 +131,43 @@ export class Player {
     this.grabBlockedUntil = now + P.GRAB_COOLDOWN;
   }
 
+  /** Pull up over the lip. Runs to completion — nothing interrupts it. */
+  startClimb(b, dir) {
+    this.climb = {
+      t: 0,
+      dir,
+      fromX: this.x,
+      fromY: this.y,
+      toX: dir > 0 ? b.x + 4 : b.x + b.w - this.w - 4,
+      toY: b.y - this.h,
+    };
+    this.hang = null;
+    this.hangDir = 0;
+    this.climbPhase = 0;
+    this.vx = 0;
+    this.vy = 0;
+  }
+
+  updateClimb(dt, now) {
+    const c = this.climb;
+    c.t += dt;
+    const p = clamp01(c.t / P.CLIMB_TIME);
+    // rise first, then shift across onto the ledge
+    const up = easeOut(clamp01(p / 0.62));
+    const over = easeInOut(clamp01((p - 0.34) / 0.66));
+    this.y = c.fromY + (c.toY - c.fromY) * up;
+    this.x = c.fromX + (c.toX - c.fromX) * over;
+    this.facing = c.dir;
+    this.climbPhase = p;
+
+    if (p >= 1) {
+      this.climb = null;
+      this.grounded = true;
+      this.groundedAt = now;
+      this.grabBlockedUntil = now + P.GRAB_COOLDOWN;
+    }
+  }
+
   /** Returns true if we stayed on the ledge and should skip the rest of the step. */
   updateHang(now, input, dir) {
     this.vx = 0;
@@ -119,20 +177,15 @@ export class Player {
     const away = dir === -this.hangDir;
 
     if (input.consumeJump(now, P.BUFFER)) {
-      const b = this.hang;
       if (away) {
         this.vy = -P.WALL_JUMP_VY;
         this.vx = -this.hangDir * P.WALL_JUMP_VX;
         this.facing = -this.hangDir;
         this.lockUntil = now + P.WALL_LOCK;
+        this.letGo(now);
       } else {
-        // climb up over the lip
-        this.x = this.hangDir > 0 ? b.x + 4 : b.x + b.w - this.w - 4;
-        this.y = b.y - this.h;
-        this.grounded = true;
-        this.groundedAt = now;
+        this.startClimb(this.hang, this.hangDir);
       }
-      this.letGo(now);
       return true;
     }
 
@@ -145,6 +198,11 @@ export class Player {
 
   update(dt, now, input, blocks) {
     const dir = input.moveX;
+
+    if (this.climb) {
+      this.updateClimb(dt, now);
+      return;
+    }
 
     if (this.hang) {
       if (this.updateHang(now, input, dir)) return;
@@ -203,7 +261,7 @@ export class Player {
     const cut = -P.JUMP_V * P.JUMP_CUT;
     if (!input.jumpHeld && this.vy < cut) this.vy = cut;
 
-    this.vy = Math.min(P.MAX_FALL, this.vy + P.GRAVITY * dt);
+    this.vy = Math.min(P.MAX_FALL, this.vy + this.gravity() * dt);
     if (this.sliding) this.vy = Math.min(this.vy, P.SLIDE_SPEED);
 
     this.moveX(this.vx * dt, blocks);
@@ -266,7 +324,17 @@ export class Player {
     const f = this.facing;
 
     let legA, legB, armA, armB;
-    if (this.hang) {
+    if (this.climb) {
+      // pull up on straightening arms, swing the near knee onto the lip, stand
+      const p = this.climbPhase;
+      const pull = clamp01(p / 0.62);
+      const step = clamp01((p - 0.34) / 0.66);
+      const lip = this.climb.toY + this.h - this.y; // lip height in local coords
+      armA = { x: cx + f * 12, y: top + 2 - pull * 6 };
+      armB = { x: cx + f * 8, y: top + 5 - pull * 6 };
+      legA = { x: cx + f * (4 + step * 10), y: Math.min(feet, top + lip - step * 4) };
+      legB = { x: cx - f * (2 + step * 4), y: feet };
+    } else if (this.hang) {
       // hands hooked over the lip, legs dangling
       legA = { x: cx + 4, y: feet };
       legB = { x: cx - 4, y: feet - 3 };
