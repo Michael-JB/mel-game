@@ -495,6 +495,98 @@ function drawLiftShaft(ctx, b) {
   ctx.fillRect(b.x - 4, b.y, b.w + 8, 10);
 }
 
+/**
+ * Street furniture, dropped into whatever slices of pavement the buildings leave
+ * open. In level 1 that is the alley you start in — a lamp on the wall, a skip,
+ * bin bags and a puddle holding the light, so there is no mistaking it for a
+ * ledge somewhere up in the air.
+ */
+export function drawStreetDressing(ctx, level) {
+  const street = level.solids.find((b) => b.kind === 'street');
+  if (!street) return;
+  const y = street.y;
+
+  // whatever the buildings don't stand on is open pavement
+  const walls = level.solids
+    .filter((b) => !b.hidden && b.kind === 'building' && b.y < y && b.y + b.h > y)
+    .map((b) => [b.x, b.x + b.w])
+    .sort((a, c) => a[0] - c[0]);
+
+  const s0 = street.x;
+  const s1 = street.x + street.w;
+  let cursor = s0;
+  const gaps = [];
+  for (const [x0, x1] of walls) {
+    if (x0 > cursor) gaps.push([cursor, x0]);
+    cursor = Math.max(cursor, x1);
+  }
+  if (cursor < s1) gaps.push([cursor, s1]);
+
+  for (const [raw0, raw1] of gaps) {
+    // only dress pavement that this street actually covers
+    const g0 = Math.max(raw0, s0);
+    const g1 = Math.min(raw1, s1);
+    const w = g1 - g0;
+    if (w < 40) continue;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(g0, y - 700, w, 900);
+    ctx.clip();
+
+    // lamp bracketed off the right-hand wall, throwing a cone down the wall
+    const lx = g1 - 14;
+    const ly = y - 210;
+    ctx.strokeStyle = '#23212e';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(lx, ly);
+    ctx.lineTo(lx - 34, ly - 10);
+    ctx.stroke();
+    ctx.fillStyle = '#23212e';
+    ctx.fillRect(lx - 48, ly - 16, 22, 9);
+    ctx.fillStyle = 'rgba(255,214,150,0.95)';
+    ctx.fillRect(lx - 46, ly - 8, 18, 5);
+
+    const cone = ctx.createLinearGradient(lx - 38, ly, lx - 38, y + 10);
+    cone.addColorStop(0, 'rgba(255,206,140,0.3)');
+    cone.addColorStop(1, 'rgba(255,180,110,0)');
+    ctx.fillStyle = cone;
+    ctx.beginPath();
+    ctx.moveTo(lx - 52, ly - 4);
+    ctx.lineTo(lx - 24, ly - 4);
+    ctx.lineTo(lx + 10, y + 10);
+    ctx.lineTo(lx - 96, y + 10);
+    ctx.closePath();
+    ctx.fill();
+
+    // doorway in the left-hand wall
+    ctx.fillStyle = '#1b1a26';
+    ctx.fillRect(g0 + 6, y - 96, 46, 96);
+    ctx.fillStyle = 'rgba(255,206,150,0.3)';
+    ctx.fillRect(g0 + 6, y - 96, 46, 4);
+    ctx.fillStyle = '#2c2a3a';
+    ctx.fillRect(g0 + 10, y - 88, 38, 88);
+
+    // skip, bin bags, a puddle catching the lamp
+    const sx = g0 + 32; // tucked against the wall, out of the way of your feet
+    ctx.fillStyle = '#5a4436';
+    ctx.fillRect(sx - 26, y - 40, 58, 40);
+    ctx.fillStyle = '#75594a';
+    ctx.fillRect(sx - 26, y - 40, 58, 5);
+    ctx.fillStyle = 'rgba(255,190,120,0.35)';
+    ctx.fillRect(sx + 27, y - 40, 5, 40);
+    ctx.fillStyle = '#22212c';
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath();
+      ctx.ellipse(g0 + 20 + i * 17, y - 9, 11, 9, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.fillStyle = 'rgba(255,200,130,0.18)';
+    ctx.fillRect(g0 + 8, y + 3, w - 16, 7);
+    ctx.restore();
+  }
+}
+
 // ---------------------------------------------------------------- rooftops
 
 const PROPS = ['ac', 'vent', 'hut', 'tank', 'dish', 'pipes', 'skylight'];
@@ -503,10 +595,10 @@ const PROPS = ['ac', 'vent', 'hut', 'tank', 'dish', 'pipes', 'skylight'];
 export function drawRooftops(ctx, level) {
   for (const b of level.solids) {
     if (b.hidden || (b.kind || 'building') !== 'building') continue;
-    const step = 190;
-    for (let x = b.x + 60; x < b.x + b.w - 90; x += step) {
+    const step = 132;
+    for (let x = b.x + 46; x < b.x + b.w - 74; x += step) {
       const r = hash(x, b.y, 61);
-      const px = x + r * 60;
+      const px = x + r * 44;
       if (blocked(level, px, b.y)) continue;
       const prop = PROPS[Math.floor(hash(px, b.y, 62) * PROPS.length)];
       drawProp(ctx, prop, px, b.y, hash(px, b.y, 63));
@@ -515,10 +607,17 @@ export function drawRooftops(ctx, level) {
   }
 }
 
-/** Don't stack clutter where a chimney or a sign already stands. */
+/** Don't stack clutter where a chimney or a sign already stands on this roof. */
 function blocked(level, x, roofY) {
   return level.solids.some(
-    (o) => o.kind && o.kind !== 'building' && o.y + o.h >= roofY - 4 && x > o.x - 70 && x < o.x + o.w + 70
+    (o) =>
+      o.kind &&
+      !o.hidden &&
+      o.kind !== 'building' &&
+      o.y < roofY && // it rises from the roof rather than lying below it
+      o.y + o.h >= roofY - 6 &&
+      x > o.x - 48 &&
+      x < o.x + o.w + 48
   );
 }
 

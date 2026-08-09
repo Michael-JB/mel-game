@@ -6,6 +6,7 @@ import {
   drawStructure,
   drawStructureShadows,
   drawRooftops,
+  drawStreetDressing,
   drawInteriorShell,
   drawFurniture,
   drawInteriorLight,
@@ -46,6 +47,7 @@ export function drawLevel(ctx, level, t) {
     drawFurniture(ctx, level);
   } else {
     drawRooftops(ctx, level);
+    drawStreetDressing(ctx, level);
   }
 
   for (const p of level.platforms) {

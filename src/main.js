@@ -123,6 +123,43 @@ newRun();
 buildTuner(document.getElementById('tuner'), document.getElementById('tuner-toggle'));
 input.bindPad(document.getElementById('touch'));
 document.getElementById('restart').addEventListener('click', () => input.onRestart());
+
+// Fullscreen, which on a phone also gets the browser chrome out of the way.
+const fsBtn = document.getElementById('fullscreen');
+const inFullscreen = () => document.fullscreenElement || document.webkitFullscreenElement;
+fsBtn.addEventListener('click', () => {
+  const el = document.documentElement;
+  if (inFullscreen()) {
+    (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
+    return;
+  }
+  const req = el.requestFullscreen || el.webkitRequestFullscreen;
+  const done = req?.call(el, { navigationUI: 'hide' });
+  Promise.resolve(done)
+    .then(() => screen.orientation?.lock?.('landscape'))
+    .catch(() => {}); // locking is refused on plenty of phones; the rest still works
+});
+for (const ev of ['fullscreenchange', 'webkitfullscreenchange']) {
+  document.addEventListener(ev, () => {
+    fsBtn.innerHTML = inFullscreen() ? '&#10530;' : '&#9974;';
+    setTimeout(resize, 80);
+  });
+}
+
+// Double-tap to zoom fights the controls, and Firefox on Android does it even
+// with user-scalable=no. Swallow the second tap of any quick pair.
+let lastTap = 0;
+addEventListener(
+  'touchend',
+  (e) => {
+    const t = performance.now();
+    if (t - lastTap < 320) e.preventDefault();
+    lastTap = t;
+  },
+  { passive: false }
+);
+addEventListener('dblclick', (e) => e.preventDefault());
+addEventListener('gesturestart', (e) => e.preventDefault());
 addEventListener('touchstart', () => document.body.classList.add('touch'), { once: true, passive: true });
 if (innerHeight > innerWidth) say('Turn the phone sideways for more room.', 4);
 

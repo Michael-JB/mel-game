@@ -68,7 +68,7 @@ const one = {
   name: 'The Well',
   setting: 'exterior',
   world: { w: 3200, h: 1500 },
-  spawnLeft: { x: 350, y: 1230 },
+  spawnLeft: { x: 388, y: 1340 },
   spawnRight: { x: 3140, y: 860 },
 
   solids: [
@@ -76,7 +76,7 @@ const one = {
 
     // Street first, so the blocks either side of the alley are drawn over it and
     // all you see of it is the slot you are standing in.
-    solid(-300, 1300, 1500, 300, 'street'),
+    solid(0, 1420, 1100, 300, 'street'),
 
     // You start at street level in the alley between two blocks. The 100-unit
     // slot between their walls is the only way up to the roofs.
