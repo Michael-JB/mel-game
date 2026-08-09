@@ -13,9 +13,9 @@ export const PAL = {
   horizon: '#ffd08a',
   sun: '#fff4d6',
 
-  far: '#3a2a55',
-  mid: '#33234b',
-  near: '#281a3c',
+  far: '#31234a',
+  mid: '#291b3f',
+  near: '#1f1530',
   lit: 'rgba(255,206,140,0.9)',
 
   concrete: '#e7e3da',
@@ -184,11 +184,11 @@ function buildingKind(b) {
 }
 
 const SKIN = {
-  glass: { wall: '#cfd4d6', band: 'rgba(70,90,110,0.35)', pane: '#33566b', frame: 'rgba(240,246,250,0.5)' },
-  concrete: { wall: '#e2ddd2', band: 'rgba(120,116,104,0.22)', pane: '#3d4358', frame: 'rgba(255,255,255,0.35)' },
-  brick: { wall: '#bd8a70', band: 'rgba(90,54,40,0.3)', pane: '#37303c', frame: 'rgba(255,225,200,0.3)' },
+  glass: { wall: '#dfe4e6', band: 'rgba(70,90,110,0.35)', pane: '#33566b', frame: 'rgba(240,246,250,0.5)' },
+  concrete: { wall: '#eeeade', band: 'rgba(120,116,104,0.22)', pane: '#3d4358', frame: 'rgba(255,255,255,0.35)' },
+  brick: { wall: '#cb9c80', band: 'rgba(90,54,40,0.3)', pane: '#37303c', frame: 'rgba(255,225,200,0.3)' },
 };
-SKIN.brick.wall = '#bd8a70';
+SKIN.brick.wall = '#cb9c80';
 
 export function drawStructure(ctx, b, world, setting) {
   switch (b.kind) {
@@ -207,7 +207,7 @@ export function drawStructure(ctx, b, world, setting) {
 function shadeFace(ctx, x, y, w, h, world, strength = 1) {
   const shadeW = Math.min(90, w * 0.32);
   const left = ctx.createLinearGradient(x, 0, x + shadeW, 0);
-  left.addColorStop(0, `rgba(52,64,104,${0.62 * strength})`);
+  left.addColorStop(0, `rgba(52,64,104,${0.4 * strength})`);
   left.addColorStop(1, 'rgba(52,64,104,0)');
   ctx.fillStyle = left;
   ctx.fillRect(x, y, shadeW, h);
@@ -222,7 +222,7 @@ function shadeFace(ctx, x, y, w, h, world, strength = 1) {
   if (!world) return;
   const depth = ctx.createLinearGradient(0, y, 0, world.h + 260);
   depth.addColorStop(0, 'rgba(26,22,52,0)');
-  depth.addColorStop(1, 'rgba(26,22,52,0.75)');
+  depth.addColorStop(1, 'rgba(26,22,52,0.52)');
   ctx.fillStyle = depth;
   ctx.fillRect(x, y, w, h);
 }
@@ -301,29 +301,53 @@ function drawBuilding(ctx, b, world, setting) {
   ctx.fillStyle = 'rgba(0,0,0,0.18)';
   ctx.fillRect(b.x, b.y + parapet - 4, b.w, 4);
   ctx.fillStyle = PAL.concreteLit;
-  ctx.fillRect(b.x, b.y, b.w, 5);
-  ctx.fillStyle = 'rgba(255,226,180,0.9)';
-  ctx.fillRect(b.x + b.w - 4, b.y, 4, deep);
-  ctx.fillStyle = 'rgba(30,34,60,0.5)';
-  ctx.fillRect(b.x, b.y, 3, deep);
+  ctx.fillRect(b.x, b.y, b.w, 6);
+  ctx.fillStyle = 'rgba(255,232,190,0.95)';
+  ctx.fillRect(b.x + b.w - 5, b.y, 5, deep);
+  ctx.fillStyle = 'rgba(150,186,235,0.6)';
+  ctx.fillRect(b.x, b.y, 4, deep);
 }
 
 function drawStreet(ctx, b, world) {
-  ctx.fillStyle = '#4a4757';
-  ctx.fillRect(b.x, b.y, b.w, b.h + 400);
-  ctx.fillStyle = '#5d5a6c';
-  ctx.fillRect(b.x, b.y, b.w, 8);
-  ctx.fillStyle = 'rgba(255,214,160,0.25)';
-  ctx.fillRect(b.x, b.y, b.w, 3);
-  // wet patches and drain
-  ctx.fillStyle = 'rgba(255,180,120,0.08)';
-  for (let i = 0; i < 5; i++) {
-    const x = b.x + hash(b.x, i, 5) * b.w;
-    ctx.fillRect(x, b.y + 4, 30 + hash(i, b.y, 6) * 70, 5);
+  const y = b.y;
+  ctx.fillStyle = '#31303e';
+  ctx.fillRect(b.x, y, b.w, b.h + 500);
+
+  // kerb, then the road falling away into shadow
+  ctx.fillStyle = '#585568';
+  ctx.fillRect(b.x, y, b.w, 12);
+  ctx.fillStyle = 'rgba(255,206,150,0.35)';
+  ctx.fillRect(b.x, y, b.w, 3);
+  ctx.fillStyle = '#3d3b4c';
+  ctx.fillRect(b.x, y + 12, b.w, 10);
+
+  const fade = ctx.createLinearGradient(0, y, 0, y + 260);
+  fade.addColorStop(0, 'rgba(18,14,32,0)');
+  fade.addColorStop(1, 'rgba(18,14,32,0.85)');
+  ctx.fillStyle = fade;
+  ctx.fillRect(b.x, y, b.w, b.h + 500);
+
+  // wet tarmac holding the last of the sky
+  for (let i = 0; i < 14; i++) {
+    const px = b.x + hash(b.x + i, y, 5) * b.w;
+    const pw = 40 + hash(i, y, 6) * 120;
+    ctx.fillStyle = `rgba(255,150,95,${0.05 + hash(i, y, 7) * 0.07})`;
+    ctx.fillRect(px, y + 16 + hash(i, y, 8) * 60, pw, 6);
   }
-  ctx.strokeStyle = 'rgba(20,18,32,0.5)';
+
+  // drain, and a kerbside bollard or two
+  ctx.strokeStyle = 'rgba(16,14,26,0.7)';
   ctx.lineWidth = 2;
-  ctx.strokeRect(b.x + b.w * 0.4, b.y + 12, 34, 20);
+  for (let i = 0; i < 3; i++) {
+    const px = b.x + 180 + hash(i, y, 9) * (b.w - 360);
+    ctx.strokeRect(px, y + 26, 36, 20);
+    ctx.beginPath();
+    ctx.moveTo(px + 12, y + 26);
+    ctx.lineTo(px + 12, y + 46);
+    ctx.moveTo(px + 24, y + 26);
+    ctx.lineTo(px + 24, y + 46);
+    ctx.stroke();
+  }
 }
 
 /** A brick stack, tapering, with iron bands and a lipped cap. */
@@ -679,29 +703,6 @@ export function drawStructureShadows(ctx, level) {
     ctx.fillStyle = 'rgba(22,16,42,0.42)';
     castShadow(ctx, b.x, b.y, b.w, b.h, len);
     ctx.restore();
-  }
-}
-
-/**
- * Red paint on the faces you are meant to climb — the city marks its own
- * maintenance routes, and it lifts them off the wall behind.
- */
-export function drawClimbMarks(ctx, level) {
-  for (const b of level.solids) {
-    if (!b.climb || b.hidden) continue;
-    const faces = b.climb === 'both' ? [-1, 1] : [b.climb === 'left' ? -1 : 1];
-    for (const side of faces) {
-      const x = side > 0 ? b.x + b.w - 13 : b.x;
-      ctx.fillStyle = 'rgba(217,68,54,0.92)';
-      ctx.fillRect(x, b.y, 13, b.h);
-      ctx.fillStyle = 'rgba(255,150,120,0.8)';
-      ctx.fillRect(side > 0 ? x + 10 : x, b.y, 3, b.h);
-      // rungs, so it reads as something to go up
-      ctx.fillStyle = 'rgba(24,20,34,0.5)';
-      for (let y = b.y + 26; y < b.y + b.h - 12; y += 44) ctx.fillRect(x, y, 13, 6);
-      ctx.fillStyle = 'rgba(255,214,170,0.5)';
-      ctx.fillRect(x, b.y, 13, 4);
-    }
   }
 }
 

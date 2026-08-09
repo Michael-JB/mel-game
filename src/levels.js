@@ -69,30 +69,33 @@ const one = {
   setting: 'exterior',
   world: { w: 3200, h: 1500 },
   spawnLeft: { x: 350, y: 1230 },
-  spawnRight: { x: 3140, y: 830 },
+  spawnRight: { x: 3140, y: 860 },
 
   solids: [
     bound(-40),
 
-    // You start at the bottom of the alley between two blocks. The 100-unit slot
-    // between their walls is the only way up to the roofs.
-    solid(0, 900, 320, 700, 'building', { climb: 'right' }),
-    solid(0, 1300, 460, 200, 'street'),
-    solid(420, 900, 680, 700, 'building', { climb: 'left' }), // (void from 1100 to 1420)
+    // Street first, so the blocks either side of the alley are drawn over it and
+    // all you see of it is the slot you are standing in.
+    solid(-300, 1300, 1500, 300, 'street'),
 
-    solid(1420, 900, 520, 700, 'building'), // (void from 1940 to 2260)
+    // You start at street level in the alley between two blocks. The 100-unit
+    // slot between their walls is the only way up to the roofs.
+    solid(0, 940, 320, 700, 'building'),
+    solid(420, 900, 680, 740, 'building'), // (void from 1100 to 1420)
+
+    solid(1420, 860, 520, 780, 'building'), // (void from 1940 to 2260)
 
     // on its roof: a sign on a lattice mast, and the stack of the old boiler
     // house next to it. The 120 between them is the climb to the key.
-    solid(1600, 180, 60, 640, 'billboard', { climb: 'right' }),
-    solid(1780, 240, 60, 660, 'chimney', { climb: 'left' }),
+    solid(1600, 180, 60, 600, 'billboard'),
+    solid(1780, 240, 60, 620, 'chimney'),
 
-    solid(2260, 900, 940, 700, 'building'), // the run-out to the portal
+    solid(2260, 930, 940, 710, 'building'), // the run-out to the portal
   ],
 
   platforms: [
     blinker(1200, 860, 120, 3.6, 2.2, 0.0, 22),
-    blinker(2040, 860, 120, 3.2, 2.0, 1.4, 22),
+    blinker(2040, 870, 120, 3.2, 2.0, 1.4, 22),
   ],
 
   key: { x: 1630, y: 110, r: 14 },
@@ -113,8 +116,8 @@ const two = {
     solid(1380, 780, 420, 720, 'building'), // the far side
 
     // the climb to the key: a sign mast and a stack, 120 apart
-    solid(1560, 200, 60, 500, 'billboard', { climb: 'right' }),
-    solid(1740, 260, 60, 520, 'chimney', { climb: 'left' }),
+    solid(1560, 200, 60, 500, 'billboard'),
+    solid(1740, 260, 60, 520, 'chimney'),
 
     solid(2400, 700, 400, 800, 'building'), // the roof the window opens off
   ],
@@ -155,8 +158,8 @@ const three = {
     solid(1180, 1400, 420, 200, 'floor'),
 
     // twin lift shafts, doors standing open — a 1100-unit climb to the key
-    solid(1250, 300, 60, 1020, 'liftshaft', { climb: 'right' }),
-    solid(1430, 360, 60, 1040, 'liftshaft', { climb: 'left' }),
+    solid(1250, 300, 60, 1020, 'liftshaft'),
+    solid(1430, 360, 60, 1040, 'liftshaft'),
 
     solid(1600, 560, 110, 20, 'slab'), // the one static step on the way down
     solid(2500, 900, 100, 200, 'floor'), // the mezzanine the portal opens off

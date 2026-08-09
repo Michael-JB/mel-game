@@ -36,8 +36,9 @@ let level, index, progress, blocks;
 let clock = 0; // drives the platform cycles; never resets, so they stay predictable
 let won = false;
 let arrest = null; // the arrest-and-jail sequence, once it has you
-let chaseAt = 0; // when the drone is due
-let chasing = false; // whether it has actually dropped in yet
+let graceLeft = 0; // head start remaining — only counts down once you move
+let started = false; // whether you have taken a step yet
+let chasing = false; // whether the drone has actually dropped in
 let trail = []; // where you have recently had both feet down
 let trailAt = 0;
 let toastUntil = 0;
@@ -76,10 +77,10 @@ function loadLevel(i, entry) {
  * put it — a spot you actually stood on, far enough back to be fair — so it can
  * never materialise on top of you, and standing still merely postpones it.
  */
-function armChase(delay) {
+function armChase(delay, already = false) {
   chasing = false;
-  chaseAt = clock + delay;
-  say('Patrol drone inbound — move.', 2.2);
+  started = already;
+  graceLeft = delay;
 }
 
 function newRun() {
@@ -169,7 +170,13 @@ function update(dt, now) {
   }
 
   if (!chasing) {
-    if (clock >= chaseAt) {
+    // the city only notices you once you move; standing at the door is free
+    if (!started && (input.moveX !== 0 || input.jumpHeld)) {
+      started = true;
+      say('Patrol drone inbound — keep moving.', 2.4);
+    }
+    if (started) graceLeft -= dt;
+    if (graceLeft <= 0) {
       const behind = trail.find(
         (p) =>
           Math.hypot(p.x - player.x, p.y - player.y) > TRAIL_BACK &&
@@ -183,7 +190,7 @@ function update(dt, now) {
   } else {
     const lost = robot.update(dt, now, blocks, player, level.world);
     if (lost) {
-      armChase(1.5);
+      armChase(1.5, true);
       say('Another unit picks up the chase.', 1.8);
     } else if (hits(player.box, robot.box)) {
       arrest = { t: 0, x: player.x, y: player.y };

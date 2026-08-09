@@ -9,7 +9,6 @@ import {
   drawInteriorShell,
   drawFurniture,
   drawInteriorLight,
-  drawClimbMarks,
   drawForeground,
   drawBrokenWindow,
 } from './scene.js';
@@ -48,7 +47,6 @@ export function drawLevel(ctx, level, t) {
   } else {
     drawRooftops(ctx, level);
   }
-  drawClimbMarks(ctx, level);
 
   for (const p of level.platforms) {
     if (p.move) {
