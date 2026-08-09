@@ -1,59 +1,86 @@
 import { Input } from './input.js';
 import { Player } from './player.js';
-import { level, allBlocks } from './level.js';
-import { drawBackground, drawLevel, drawKey, drawDoor } from './render.js';
+import { LEVELS, activeBlocks } from './levels.js';
+import { drawBackground, drawLevel, drawKey, drawGate } from './render.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
+const levelLabel = document.getElementById('level-label');
 const keyStatus = document.getElementById('key-status');
 const banner = document.getElementById('banner');
 const bannerText = document.getElementById('banner-text');
+const toast = document.getElementById('toast');
 
 const VIEW_H = 620; // world units visible vertically; sets the zoom
 const STEP = 1 / 120;
 
 const input = new Input();
-const blocks = allBlocks();
-const player = new Player(level.spawn);
+const player = new Player(LEVELS[0].spawnLeft);
 const cam = { x: 0, y: 0 };
 
-let state, view, scale;
+let level, index, progress, blocks;
+let clock = 0; // drives the platform cycles; never resets, so they stay predictable
+let won = false;
+let toastUntil = 0;
+let view, scale;
 
-function restart() {
-  player.reset(level.spawn);
-  state = { hasKey: false, won: false, time: 0 };
-  cam.x = player.x - view.w / 2;
-  cam.y = player.y - view.h / 2;
-  keyStatus.textContent = 'No key';
-  keyStatus.className = 'chip locked';
-  banner.classList.add('hidden');
+function say(text, seconds = 2) {
+  toast.textContent = text;
+  toast.classList.remove('hidden');
+  toastUntil = clock + seconds;
 }
-input.onRestart = restart;
+
+function hud() {
+  levelLabel.textContent = `Level ${index + 1}/${LEVELS.length} — ${level.name}`;
+  const has = progress[index].hasKey;
+  keyStatus.textContent = has ? 'Key!' : 'No key';
+  keyStatus.className = has ? 'chip have' : 'chip locked';
+}
+
+function loadLevel(i, entry) {
+  index = i;
+  level = LEVELS[i];
+  player.reset(entry === 'right' ? level.spawnRight : level.spawnLeft);
+  cam.x = player.x + player.w / 2 - view.w / 2;
+  cam.y = player.y + player.h / 2 - view.h / 2;
+  hud();
+}
+
+function newRun() {
+  progress = LEVELS.map(() => ({ hasKey: false }));
+  won = false;
+  banner.classList.add('hidden');
+  loadLevel(0, 'left');
+}
+input.onRestart = newRun;
+
+function die() {
+  newRun();
+  say('You fell. Back to the start.', 2.5);
+}
 
 function resize() {
   const dpr = Math.min(devicePixelRatio || 1, 2);
-  const cssW = innerWidth;
-  const cssH = innerHeight;
-  canvas.width = Math.round(cssW * dpr);
-  canvas.height = Math.round(cssH * dpr);
-  scale = cssH / VIEW_H;
-  view = { w: cssW / scale, h: VIEW_H };
+  canvas.width = Math.round(innerWidth * dpr);
+  canvas.height = Math.round(innerHeight * dpr);
+  scale = innerHeight / VIEW_H;
+  view = { w: innerWidth / scale, h: VIEW_H };
   ctx.setTransform(dpr * scale, 0, 0, dpr * scale, 0, 0);
 }
 addEventListener('resize', resize);
 resize();
-restart();
+newRun();
 
 const clamp = (v, lo, hi) => (lo > hi ? (lo + hi) / 2 : Math.max(lo, Math.min(hi, v)));
 
 function followCamera(dt) {
   const targetX = player.x + player.w / 2 - view.w / 2;
-  const targetY = player.y + player.h / 2 - view.h / 2 + 40;
+  const targetY = player.y + player.h / 2 - view.h / 2 + 30;
   const k = 1 - Math.pow(0.0015, dt);
   cam.x += (targetX - cam.x) * k;
   cam.y += (targetY - cam.y) * k;
   cam.x = clamp(cam.x, 0, level.world.w - view.w);
-  cam.y = clamp(cam.y, -120, level.world.h - view.h);
+  cam.y = clamp(cam.y, 0, level.world.h - view.h);
 }
 
 function hits(a, b) {
@@ -61,26 +88,45 @@ function hits(a, b) {
 }
 
 function update(dt, now) {
-  state.time += dt;
-  if (state.won) return;
-
+  if (won) return;
+  const here = progress[index];
+  blocks = activeBlocks(level, clock, here.hasKey);
   player.update(dt, now, input, blocks);
 
-  if (player.y > level.world.h + 200) player.reset(level.spawn);
+  if (player.y > level.world.h + 200) {
+    die();
+    return;
+  }
 
-  if (!state.hasKey) {
+  if (!here.hasKey) {
     const k = level.key;
     if (hits(player.box, { x: k.x - k.r, y: k.y - k.r, w: k.r * 2, h: k.r * 2 })) {
-      state.hasKey = true;
-      keyStatus.textContent = 'Key!';
-      keyStatus.className = 'chip have';
+      here.hasKey = true;
+      hud();
+      say('Key! The gate is at the far right.');
     }
   }
 
-  if (state.hasKey && hits(player.box, level.door)) {
-    state.won = true;
-    bannerText.innerHTML = 'Level complete<small>Press R to play again</small>';
-    banner.classList.remove('hidden');
+  // back to the previous level through the left edge
+  if (index > 0 && player.x < 0) {
+    loadLevel(index - 1, 'right');
+    return;
+  }
+
+  // a locked gate is solid, so test a slightly padded box for the "locked" nudge
+  const g = level.gate;
+  const near = here.hasKey ? g : { x: g.x - 6, y: g.y - 6, w: g.w + 12, h: g.h + 12 };
+  if (hits(player.box, near)) {
+    if (!here.hasKey) {
+      if (clock > toastUntil) say('Locked. Find the key — try higher up.');
+    } else if (index + 1 < LEVELS.length) {
+      loadLevel(index + 1, 'left');
+      return;
+    } else {
+      won = true;
+      bannerText.innerHTML = 'All three levels cleared<small>Press R to start over</small>';
+      banner.classList.remove('hidden');
+    }
   }
 }
 
@@ -92,6 +138,12 @@ function frame() {
   const frameDt = Math.min(0.05, now - last);
   acc += Math.min(0.25, now - last);
   last = now;
+  clock += frameDt;
+  if (toastUntil && clock > toastUntil) {
+    toast.classList.add('hidden');
+    toastUntil = 0;
+  }
+
   while (acc >= STEP) {
     update(STEP, now);
     acc -= STEP;
@@ -101,9 +153,9 @@ function frame() {
   drawBackground(ctx, cam, view, level.world);
   ctx.save();
   ctx.translate(-Math.round(cam.x), -Math.round(cam.y));
-  drawLevel(ctx, level);
-  if (!state.hasKey) drawKey(ctx, level.key, state.time);
-  drawDoor(ctx, level.door, state.hasKey, state.time);
+  drawLevel(ctx, level, clock);
+  if (!progress[index].hasKey) drawKey(ctx, level.key, clock);
+  drawGate(ctx, level.gate, progress[index].hasKey, clock);
   player.draw(ctx);
   ctx.restore();
 
@@ -111,5 +163,13 @@ function frame() {
 }
 requestAnimationFrame(frame);
 
-// handy while we iterate on the level
-window.__game = { player, input, cam, level, getState: () => state };
+// handy while we iterate on the levels
+window.__game = {
+  player,
+  input,
+  cam,
+  LEVELS,
+  at: () => ({ index, level: level.name, progress, clock }),
+  goto: (i, entry) => loadLevel(i, entry),
+  tp: (x, y) => player.reset({ x, y }),
+};

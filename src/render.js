@@ -1,3 +1,5 @@
+import { cycleOn, cycleLeft } from './levels.js';
+
 const INK = '#1a1a1a';
 const PAPER = '#f2f0eb';
 
@@ -8,12 +10,12 @@ export function drawBackground(ctx, cam, view, world) {
   // two parallax bands of hills, drawn in world space via the camera transform
   ctx.save();
   ctx.translate(-cam.x * 0.3, -cam.y * 0.15);
-  hills(ctx, world.w, 880, 220, 520, 'rgba(26,26,26,0.07)');
+  hills(ctx, world.w, world.h - 200, 220, 520, 'rgba(26,26,26,0.07)');
   ctx.restore();
 
   ctx.save();
   ctx.translate(-cam.x * 0.55, -cam.y * 0.3);
-  hills(ctx, world.w, 900, 150, 380, 'rgba(26,26,26,0.11)');
+  hills(ctx, world.w, world.h - 160, 150, 380, 'rgba(26,26,26,0.11)');
   ctx.restore();
 }
 
@@ -24,13 +26,13 @@ function hills(ctx, worldW, baseY, height, spacing, fill) {
   for (let x = -500; x < worldW + 1000; x += spacing) {
     ctx.quadraticCurveTo(x + spacing / 2, baseY - height, x + spacing, baseY);
   }
-  ctx.lineTo(worldW + 1000, baseY + 400);
-  ctx.lineTo(-500, baseY + 400);
+  ctx.lineTo(worldW + 1000, baseY + 600);
+  ctx.lineTo(-500, baseY + 600);
   ctx.closePath();
   ctx.fill();
 }
 
-export function drawLevel(ctx, level) {
+export function drawLevel(ctx, level, t) {
   for (const b of level.solids) {
     if (b.hidden) continue;
     ctx.fillStyle = INK;
@@ -39,13 +41,41 @@ export function drawLevel(ctx, level) {
     ctx.fillRect(b.x, b.y, b.w, 4);
   }
 
-  ctx.lineWidth = 3;
   for (const p of level.platforms) {
-    ctx.fillStyle = PAPER;
-    ctx.strokeStyle = INK;
-    ctx.fillRect(p.x, p.y, p.w, p.h);
-    ctx.strokeRect(p.x + 1.5, p.y + 1.5, p.w - 3, p.h - 3);
+    if (!p.cycle) {
+      ctx.lineWidth = 3;
+      ctx.setLineDash([]);
+      ctx.fillStyle = PAPER;
+      ctx.strokeStyle = INK;
+      ctx.fillRect(p.x, p.y, p.w, p.h);
+      ctx.strokeRect(p.x + 1.5, p.y + 1.5, p.w - 3, p.h - 3);
+      continue;
+    }
+
+    const on = cycleOn(p.cycle, t);
+    const left = cycleLeft(p.cycle, t);
+    ctx.save();
+    if (on) {
+      // solid, but flashes for the last stretch before it drops away
+      const warn = left < 0.9 && Math.floor(left * 8) % 2 === 0;
+      ctx.globalAlpha = warn ? 0.35 : 1;
+      ctx.lineWidth = 3;
+      ctx.setLineDash([]);
+      ctx.fillStyle = PAPER;
+      ctx.strokeStyle = INK;
+      ctx.fillRect(p.x, p.y, p.w, p.h);
+      ctx.strokeRect(p.x + 1.5, p.y + 1.5, p.w - 3, p.h - 3);
+    } else {
+      // ghost outline: it is coming back, and you can see when
+      ctx.globalAlpha = left < 0.7 ? 0.5 : 0.22;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([7, 6]);
+      ctx.strokeStyle = INK;
+      ctx.strokeRect(p.x + 1, p.y + 1, p.w - 2, p.h - 2);
+    }
+    ctx.restore();
   }
+  ctx.setLineDash([]);
 }
 
 export function drawKey(ctx, key, t) {
@@ -73,39 +103,59 @@ export function drawKey(ctx, key, t) {
   ctx.restore();
 }
 
-export function drawDoor(ctx, door, unlocked, t) {
+export function drawGate(ctx, gate, open, t) {
+  const lift = open ? gate.h * 0.62 : 0; // bars retract upward once unlocked
   ctx.save();
   ctx.lineWidth = 3;
-  ctx.fillStyle = unlocked ? '#ffd23f' : PAPER;
+  ctx.lineCap = 'round';
   ctx.strokeStyle = INK;
-  ctx.fillRect(door.x, door.y, door.w, door.h);
-  ctx.strokeRect(door.x + 1.5, door.y + 1.5, door.w - 3, door.h - 3);
 
-  // arched panel
+  // posts stay put
   ctx.beginPath();
-  ctx.moveTo(door.x + 12, door.y + door.h - 8);
-  ctx.lineTo(door.x + 12, door.y + 30);
-  ctx.quadraticCurveTo(door.x + door.w / 2, door.y + 8, door.x + door.w - 12, door.y + 30);
-  ctx.lineTo(door.x + door.w - 12, door.y + door.h - 8);
+  ctx.moveTo(gate.x - 6, gate.y - 8);
+  ctx.lineTo(gate.x - 6, gate.y + gate.h);
+  ctx.moveTo(gate.x + gate.w + 6, gate.y - 8);
+  ctx.lineTo(gate.x + gate.w + 6, gate.y + gate.h);
+  ctx.moveTo(gate.x - 12, gate.y - 8);
+  ctx.lineTo(gate.x + gate.w + 12, gate.y - 8);
   ctx.stroke();
 
-  // keyhole / handle
+  ctx.save();
   ctx.beginPath();
-  if (unlocked) {
-    ctx.arc(door.x + door.w - 20, door.y + door.h / 2, 4, 0, Math.PI * 2);
-    ctx.stroke();
-  } else {
-    ctx.arc(door.x + door.w / 2, door.y + door.h / 2, 5, 0, Math.PI * 2);
-    ctx.moveTo(door.x + door.w / 2, door.y + door.h / 2 + 4);
-    ctx.lineTo(door.x + door.w / 2, door.y + door.h / 2 + 14);
-    ctx.stroke();
+  ctx.rect(gate.x - 4, gate.y - 8, gate.w + 8, gate.h + 8);
+  ctx.clip();
+  ctx.translate(0, -lift);
+  ctx.strokeStyle = open ? '#c99700' : INK;
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  for (let i = 0; i <= 2; i++) {
+    const x = gate.x + 3 + (i * (gate.w - 6)) / 2;
+    ctx.moveTo(x, gate.y);
+    ctx.lineTo(x, gate.y + gate.h);
   }
+  for (let i = 1; i <= 2; i++) {
+    const y = gate.y + (i * gate.h) / 3;
+    ctx.moveTo(gate.x, y);
+    ctx.lineTo(gate.x + gate.w, y);
+  }
+  ctx.stroke();
+  ctx.restore();
 
-  if (unlocked) {
-    ctx.globalAlpha = 0.35 + Math.sin(t * 4) * 0.15;
+  if (open) {
+    ctx.globalAlpha = 0.3 + Math.sin(t * 4) * 0.15;
     ctx.strokeStyle = '#c99700';
     ctx.lineWidth = 4;
-    ctx.strokeRect(door.x - 4, door.y - 4, door.w + 8, door.h + 8);
+    ctx.strokeRect(gate.x - 10, gate.y - 10, gate.w + 20, gate.h + 20);
+  } else {
+    // padlock
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 2.5;
+    const cx = gate.x + gate.w / 2;
+    const cy = gate.y + gate.h / 2;
+    ctx.strokeRect(cx - 7, cy - 3, 14, 12);
+    ctx.beginPath();
+    ctx.arc(cx, cy - 3, 4.5, Math.PI, 0);
+    ctx.stroke();
   }
   ctx.restore();
 }

@@ -10,12 +10,13 @@
 <canvas id="game"></canvas>
 
 <div id="hud">
-  <span class="label">Level 1</span>
+  <span id="level-label" class="label">Level 1</span>
   <span id="key-status" class="chip locked">No key</span>
 </div>
 
-<div id="hint">A / D or ← → to move · W / ↑ / Space to jump · R to restart</div>
+<div id="hint">A / D or ← → move · W / ↑ / Space jump · cling to walls and kick off them · grab a ledge and press jump to climb up, S to drop · R restart</div>
 
+<div id="toast" class="hidden"></div>
 <div id="banner" class="hidden"><div id="banner-text"></div></div>
 
 <script type="module" src="src/main.js"></script>
